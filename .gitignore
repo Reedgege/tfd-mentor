@@ -1,0 +1,23 @@
+# 构建产物
+build/
+dist/
+_bak/
+*.spec
+__pycache__/
+*.pyc
+.DS_Store
+
+# 临时测试
+testdata/
+test_*.py
+make_test_docx.py
+
+# 本地环境
+.venv/
+venv/
+env/
+
+# 测试/运行产物
+smoke_report.xlsx
+*.log
+.tfd_mentor_license/
