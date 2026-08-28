@@ -52,6 +52,11 @@ try:
 except ImportError:
     sys.path.insert(0, CORE_DIR)
     from xlsx_report import write_change_report_xlsx
+try:
+    from group_report import aggregate, extract_issues_from_markdown, classify_issue
+except ImportError:
+    sys.path.insert(0, CORE_DIR)
+    from group_report import aggregate, extract_issues_from_markdown, classify_issue
 
 
 ICON = os.path.join(HERE, "assets", "icon.png")
@@ -1436,6 +1441,7 @@ class App:
             # 注意：_confirm_profile_if_needed 在 worker 内用 Event 等待主线程弹窗，安全
             total = len(self.thesis_paths)
             rows = []
+            group_cats = []
             for i, src in enumerate(self.thesis_paths, 1):
                 self._set_status("正在处理第 %d/%d 篇：%s" % (i, total, os.path.basename(src)), RUN)
                 try:
@@ -1469,6 +1475,14 @@ class App:
                         out_note = "修正稿：%s" % os.path.basename(dst)
                     rows.append([str(i), os.path.basename(src), mode_label, out_note,
                                  "明细见 %s" % os.path.basename(xlsx)])
+                    # 全组共性问题：原始稿体检 → 归类 → 跨篇聚合（导师组会汇报用）
+                    try:
+                        _grp_md = engine.run_check(docx_path, profile_path=profile)
+                        _grps = [classify_issue(m) for m in extract_issues_from_markdown(_grp_md)]
+                        if _grps:
+                            group_cats.append((os.path.basename(src), _grps))
+                    except Exception as e:
+                        self._debug("[全组共性问题采集失败，已跳过] " + str(e))
                 except Exception as e:
                     self._debug("[批量处理失败] %s → %s" % (src, e))
                     rows.append([str(i), os.path.basename(src), mode_label, "（处理失败）", "错误：%s" % e])
@@ -1484,6 +1498,14 @@ class App:
                     "批量处理汇总（论文格式医生·导师版）", summary, columns, rows)
             except Exception as e:
                 self._debug("[汇总 Excel 生成失败] " + str(e))
+            # 全组共性问题总表（便于导师组会一句话汇报）
+            try:
+                _g_sum, _g_cols, _g_rows = aggregate(group_cats, total)
+                write_change_report_xlsx(
+                    os.path.join(out_dir, "汇总_全组共性问题.xlsx"),
+                    "全组共性问题总表（论文格式医生·导师版）", _g_sum, _g_cols, _g_rows)
+            except Exception as e:
+                self._debug("[全组共性问题总表生成失败] " + str(e))
             self._batch_out_dir = out_dir
             self.root.after(0, lambda: self._on_batch_done(idx, mode, out_dir, len(rows)))
         except Exception as e:
@@ -1890,6 +1912,8 @@ def show_activation(root, show_trial=True):
               command=lambda: show_help(top)).pack(side="left", padx=14)
     _site_label(hl).pack(side="left", padx=14)
 
+    tk.Label(top, text="未签名程序提示：Windows 可能弹出 SmartScreen 拦截，点击「详细信息」→「仍要运行」即可打开（官网激活教程有图文演示）。",
+             bg=PAPER, fg=MUTED, font=F_FOOT, wraplength=560).pack(pady=(2, 6))
     tk.Label(top, text="© 2026 论文格式医生 · 公众号【芦苇不熬夜】 ID：reedskill · 合作联系：reedskill@126.com",
              bg=PAPER, fg=MUTED, font=F_FOOT, wraplength=560).pack(pady=(8, 10))
 
@@ -2043,6 +2067,8 @@ def show_about(parent):
          BODY, F_SMALL, (0, 4))
     wlbl("模板驱动 · 格式要求取自学校模板，批注说明为先，样式定义次之。",
          BODY, F_SMALL, (0, 12))
+    wlbl("未签名程序 · 首次打开时 Windows 可能弹出 SmartScreen 拦截，点击「详细信息」→「仍要运行」即可（官网激活教程有图文演示）。",
+         MUTED, F_SMALL, (0, 12))
 
     tk.Label(inner, text="© 2026 芦苇不熬夜", bg=PAPER, fg=MUTED,
              font=F_FOOT).pack(padx=padx, pady=(0, 18))
@@ -2130,6 +2156,9 @@ def show_help(parent):
          "请放心。所有修正均在本机完成，论文不联网、不上传任何服务器，亦不收集论文内容；断网亦可使用。"),
         ("Q7 · 学校模板特殊，或修正结果不尽如人意？",
          "欢迎关注公众号【%s】留言，告知贵校情况，我们协助处理。" % WECHAT_NAME),
+        ("Q8 · 打开软件时 Windows 弹出“已保护你的电脑 / 已拦截”提示？",
+         "本软件为未签名程序（省去每年数百元代码签名证书费用，让价格更亲民），Windows SmartScreen 会拦截提示，属正常现象，不代表软件有害。\n"
+         "处理方式：在拦截框点击【详细信息】→ 再点击【仍要运行】即可正常打开；官网 reedskill.com 的“激活教程”页有图文演示。"),
     ]
     for title, body in faqs:
         item(title, body)
