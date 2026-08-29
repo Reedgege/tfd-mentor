@@ -403,6 +403,7 @@ class App:
         self.author_var = tk.StringVar(value="论文格式医生·导师版")  # 批注署名（导师名）
         # 导师版默认交付：先"生成批注副本"（只标不改，可转发学生），其次"一键修正"
         self._fix_mode = "annotate"
+        self._fix_mode_var = tk.StringVar(value="annotate")  # 交付模式变量（默认只批注不改原稿）
         self.status_var = tk.StringVar(value="请按步骤操作")
         self.running = False
         self._dialog_open = False   # 保存对话框打开期间防重复弹窗
@@ -417,10 +418,10 @@ class App:
         self._msgs = []
         self.step_defs = [("profile", "提取学校模板要求"),
                           ("check", "论文格式检查"),
-                          ("fix", "生成批注副本 / 修正")]
+                          ("fix", "选交付方式（只批注 or 修正）")]
         self.step_desc = ["识别字号、页边距与格式规范",
-                          "快速定位格式问题与待修正项",
-                          "可批量：只标不改发学生，或直接改好"]
+                          "生成格式检查报告，不动文件",
+                          "二选一：只批注不改原稿，或直接改好"]
         self.step_index = 0
 
         self._build_style()
@@ -675,22 +676,43 @@ class App:
 
         self._build_timeline(card)
 
-        # 导师版交付模式切换：默认"生成批注副本"（只标不改，可转发学生），其次"一键修正"
+        # 导师版交付方式：把"只批注不修改"和"一键修正"做成两个清晰大卡片（傻瓜式）
         _mode = tk.Frame(card, bg="#fdf3e7", highlightthickness=1, highlightbackground="#e6c794")
         _mode.pack(fill="x", padx=14, pady=(2, 6))
-        tk.Label(_mode, text="第③步交付方式", bg="#fdf3e7", fg="#7a4e0e",
-                 font=F_SMALL_B).pack(anchor="w", padx=12, pady=(7, 2))
-        _opt = tk.Frame(_mode, bg="#fdf3e7")
-        _opt.pack(fill="x", padx=12, pady=(0, 8))
+        tk.Label(_mode, text="第③步 · 选交付方式（两种模式，二选一）", bg="#fdf3e7",
+                 fg="#7a4e0e", font=F_SMALL_B).pack(anchor="w", padx=12, pady=(9, 6))
+
+        # 交付模式变量（默认"只批注不改原稿"）；注意：原版在 _opt 块内初始化，
+        # 重构卡片时此行若遗漏会导致向导第③步渲染 Radiobutton 时 AttributeError 崩溃。
         self._fix_mode_var = tk.StringVar(value="annotate")
-        tk.Radiobutton(_opt, text="① 生成批注副本（推荐·只标不改，可转发学生）",
-                       variable=self._fix_mode_var, value="annotate",
-                       bg="#fdf3e7", fg=INK, font=F_SMALL, activebackground="#fdf3e7",
-                       command=lambda: self._set_fix_mode("annotate")).pack(anchor="w")
-        tk.Radiobutton(_opt, text="② 一键修正（直接改好，生成可交稿文档）",
-                       variable=self._fix_mode_var, value="fix",
-                       bg="#fdf3e7", fg=INK, font=F_SMALL, activebackground="#fdf3e7",
-                       command=lambda: self._set_fix_mode("fix")).pack(anchor="w", pady=(2, 0))
+
+        # —— 卡片 A：只批注 · 不改原稿（默认选中、蓝色高亮）——
+        self._card_annotate = tk.Frame(_mode, bg="#ffffff",
+                                       highlightthickness=2, highlightbackground=ACCENT)
+        self._card_annotate.pack(fill="x", padx=12, pady=(0, 8))
+        tk.Radiobutton(self._card_annotate, variable=self._fix_mode_var, value="annotate",
+                       bg="#ffffff", activebackground="#ffffff", fg=INK, font=F_BODY,
+                       command=lambda: self._set_fix_mode("annotate")).pack(anchor="w", padx=10, pady=(8, 0))
+        tk.Label(self._card_annotate, text="① 只批注 · 不改原稿（推荐）", bg="#ffffff",
+                 fg=INK, font=F_SUBTITLE).pack(anchor="w", padx=32)
+        tk.Label(self._card_annotate,
+                 text="学生论文一字不动，只在问题处插入你的署名气泡批注，转发学生自己改。",
+                 bg="#ffffff", fg=MUTED, font=F_FOOT).pack(anchor="w", padx=32)
+        tk.Label(self._card_annotate, text="✔ 原稿不会被改动一个字 · 不破坏学生已有内容",
+                 bg="#ffffff", fg=OKC, font=F_FOOT).pack(anchor="w", padx=32, pady=(0, 9))
+
+        # —— 卡片 B：一键修正 · 直接改好 ——
+        self._card_fix = tk.Frame(_mode, bg="#ffffff",
+                                  highlightthickness=2, highlightbackground="#cfc7b5")
+        self._card_fix.pack(fill="x", padx=12, pady=(0, 10))
+        tk.Radiobutton(self._card_fix, variable=self._fix_mode_var, value="fix",
+                       bg="#ffffff", activebackground="#ffffff", fg=INK, font=F_BODY,
+                       command=lambda: self._set_fix_mode("fix")).pack(anchor="w", padx=10, pady=(8, 0))
+        tk.Label(self._card_fix, text="② 一键修正 · 直接改好", bg="#ffffff",
+                 fg=INK, font=F_SUBTITLE).pack(anchor="w", padx=32)
+        tk.Label(self._card_fix,
+                 text="按学校模板把格式直接改好，生成可交稿文档（原稿另存为副本，不动原件）。",
+                 bg="#ffffff", fg=MUTED, font=F_FOOT).pack(anchor="w", padx=32, pady=(0, 9))
 
         self.progress = ttk.Progressbar(card, mode="indeterminate")
         self.progress.pack(fill="x", padx=14, pady=(4, 2))
@@ -899,8 +921,13 @@ class App:
         self._update_profile_box()
 
     def _set_fix_mode(self, mode):
-        """切换第③步交付方式：annotate=生成批注副本（默认）/ fix=一键修正。"""
+        """切换第③步交付方式：annotate=只批注不修改（默认）/ fix=一键修正。"""
         self._fix_mode = mode
+        if getattr(self, "_card_annotate", None) is not None:
+            self._card_annotate.config(
+                highlightbackground=ACCENT if mode == "annotate" else "#cfc7b5")
+            self._card_fix.config(
+                highlightbackground=ACCENT if mode == "fix" else "#cfc7b5")
         self._refresh_wizard()
 
     # ---------------------------------------------------------------- run（向导）

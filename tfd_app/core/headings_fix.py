@@ -35,7 +35,8 @@ from docxutils import (load, detect_heading, write_docx_files, to_doc_xml, WR,
                        load_styles, WPR, AR, PICR, EMU_PER_TWIP, EMU_PER_CM,
                        _DEFAULT_TEXT_WIDTH_EMU,
                        replace_punct_in_paragraph, punct_counts_summary, punct_total,
-                       ensure_comments_part, add_comment_marker, max_comment_id)
+                       ensure_comments_part, add_comment_marker, max_comment_id,
+                       normalize_heading_styles)
 from report_docx import write_change_report
 from xlsx_report import write_change_report_xlsx
 
@@ -1317,6 +1318,8 @@ def _remove_numbering_pass(root, first_chap, ref_start, tbl_ps, cap_targets,
 
 
 def fix(src, dst, profile=None, add_comments=True, author=None):
+    # 数据入口防御：兼容 {lvl:"StyleId"} 旧式写法与规范式，避免消费端 .get 崩溃
+    profile = normalize_heading_styles(profile)
     z, root = load(src)
 
     # 样式表：用于识别目录(toc)样式段落，避免误套标题/污染正文区
