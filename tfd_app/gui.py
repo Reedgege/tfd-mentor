@@ -1522,7 +1522,7 @@ class App:
             try:
                 write_change_report_xlsx(
                     os.path.join(out_dir, "汇总_修改明细.xlsx"),
-                    "批量处理汇总（论文格式医生·导师版）", summary, columns, rows)
+                    "批量处理汇总（%s）" % (author or "论文格式医生·导师版"), summary, columns, rows)
             except Exception as e:
                 self._debug("[汇总 Excel 生成失败] " + str(e))
             # 全组共性问题总表（便于导师组会一句话汇报）
@@ -1530,7 +1530,7 @@ class App:
                 _g_sum, _g_cols, _g_rows = aggregate(group_cats, total)
                 write_change_report_xlsx(
                     os.path.join(out_dir, "汇总_全组共性问题.xlsx"),
-                    "全组共性问题总表（论文格式医生·导师版）", _g_sum, _g_cols, _g_rows)
+                    "全组共性问题总表（%s）" % (author or "论文格式医生·导师版"), _g_sum, _g_cols, _g_rows)
             except Exception as e:
                 self._debug("[全组共性问题总表生成失败] " + str(e))
             self._batch_out_dir = out_dir
