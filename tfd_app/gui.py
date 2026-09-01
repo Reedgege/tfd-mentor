@@ -104,7 +104,7 @@ _FONT_BASE = {
     "F_DIALOG_TITLE": ("KaiTi", 14, "bold"),    # 弹窗标题（楷体）
     "F_ICON":       ("KaiTi", 12, "bold"),      # 印章图标（论 / 模，楷体朱砂）
 }
-APP_VERSION = "1.0.9"   # 与 VERSION 文件保持同步（状态栏显示用）
+APP_VERSION = "1.0.10"  # 与 VERSION 文件保持同步（状态栏显示用）
 _FONTS = {}      # name -> (Font, base_size)
 _CUR_SCALE = 1.0 # 当前窗口缩放比例（宽度 / 基准宽度，钳制 0.8~1.0：只缩小不放大）
 BASE_W = 900     # 设计基准宽度（px），与主窗口默认 900x640 对应
@@ -397,8 +397,22 @@ class App:
     def __init__(self, root):
         self.root = root
         self.root.title("论文格式医生 · 导师版")
-        self.root.geometry("1100x760")
-        self.root.minsize(950, 700)
+        # v1.0.10：再次加大默认窗口尺寸（1280×860），确保左栏+右栏+页脚在 1080p 屏幕
+        # 默认显示比例下都完整露出；最小尺寸也对应加大到 1080×820
+        self.root.geometry("1280x860")
+        self.root.minsize(1080, 820)
+        # v1.0.10：Windows 上、且屏幕分辨率 ≥ 1440×900 时启动即最大化，
+        # 让页脚/状态栏在最大化窗口里绝对可见（避免用户拖到小窗口时把页脚裁掉）；
+        # 1366×768 等小屏幕跳过，让用户保留窗口控制权（最大化后无关闭按钮风险）。
+        # macOS/Linux 跳过（行为不同）。
+        try:
+            if sys.platform.startswith("win"):
+                sw = self.root.winfo_screenwidth()
+                sh = self.root.winfo_screenheight()
+                if sw >= 1440 and sh >= 900:
+                    self.root.state("zoomed")
+        except tk.TclError:
+            pass
         try:
             if os.path.isfile(ICON):
                 self.root.iconphoto(True, tk.PhotoImage(file=ICON))
@@ -520,8 +534,9 @@ class App:
         # 主体两栏（文件选择 | 处理步骤）
         main = tk.Frame(self.root, bg=PAPER)
         main.pack(fill="both", expand=True, padx=20, pady=14)
-        # 左栏固定宽度、右栏独占剩余空间：处理时进度条等元素增减不会让右栏忽宽忽窄、进而挤压左栏
-        main.columnconfigure(0, weight=0, minsize=480)
+        # 左栏固定 540px（v1.0.10 再次加宽，确保"选择论文…/选择文件夹…"两个 Ghost 按钮能并排完整显示），
+        # 右栏独占剩余空间：处理时进度条等元素增减不会让右栏忽宽忽窄、进而挤压左栏
+        main.columnconfigure(0, weight=0, minsize=540)
         main.columnconfigure(1, weight=1)
         main.rowconfigure(0, weight=1)
         left = tk.Frame(main, bg=PAPER)
@@ -698,15 +713,19 @@ class App:
         tk.Label(tl, text=title, bg="#ffffff", fg=INK, font=F_SUBTITLE).pack(side="left")
         tk.Label(tl, text=" " + mark, bg="#ffffff", fg=mark_color, font=F_FOOT).pack(side="left")
         # 按钮单独放一框，始终横向排列在右上角；避免与文件名挤在同一行被撑到换行
+        # v1.0.10：width=10 给按钮一个最小宽度（≈中文 5 字 + padding），
+        # 防止"选择文件夹…"等较长的按钮文字被窗口主题压成"选择文/件夹…"换行
         btn_frame = tk.Frame(row, bg="#ffffff")
         btn_frame.pack(side="right")
         if btn2_text and cmd2:
-            ttk.Button(btn_frame, text=btn2_text, style="Ghost.TButton", command=cmd2).pack(
-                side="left", padx=(0, 6))
-        ttk.Button(btn_frame, text=btn_text, style="Ghost.TButton", command=cmd).pack(side="left")
+            ttk.Button(btn_frame, text=btn2_text, width=10, style="Ghost.TButton",
+                       command=cmd2).pack(side="left", padx=(0, 6))
+        ttk.Button(btn_frame, text=btn_text, width=10, style="Ghost.TButton",
+                   command=cmd).pack(side="left")
         # 文件名/说明文字另起一行，宽度随卡片自适应
+        # v1.0.10：左栏加宽到 540 后，wraplength 从 360 提到 480，给长文件名更宽的展示空间
         name_lbl = tk.Label(box, text=desc, bg="#ffffff", fg=MUTED, font=F_FOOT,
-                            anchor="w", justify="left", wraplength=360)
+                            anchor="w", justify="left", wraplength=480)
         name_lbl.pack(anchor="w", fill="x", padx=10, pady=(0, 8))
         return box, name_lbl
 
