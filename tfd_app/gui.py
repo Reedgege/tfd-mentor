@@ -104,7 +104,7 @@ _FONT_BASE = {
     "F_DIALOG_TITLE": ("KaiTi", 14, "bold"),    # 弹窗标题（楷体）
     "F_ICON":       ("KaiTi", 12, "bold"),      # 印章图标（论 / 模，楷体朱砂）
 }
-APP_VERSION = "1.0.6"   # 与 VERSION 文件保持同步（状态栏显示用）
+APP_VERSION = "1.0.7"   # 与 VERSION 文件保持同步（状态栏显示用）
 _FONTS = {}      # name -> (Font, base_size)
 _CUR_SCALE = 1.0 # 当前窗口缩放比例（宽度 / 基准宽度，钳制 0.8~1.0：只缩小不放大）
 BASE_W = 900     # 设计基准宽度（px），与主窗口默认 900x640 对应
@@ -414,7 +414,7 @@ class App:
         self.template_path = tk.StringVar()
         self.profile_path = tk.StringVar()
         self.author_var = tk.StringVar(value="论文格式医生·导师版")  # 批注署名（导师名）
-        # 导师版交付方式：批注副本 / 一键修正 / 两种都要（三选一，默认只批注不改原稿）
+        # 导师版交付方式：批注副本 / 一键修正 / ①+② 都要（三选一，默认只批注不改原稿）
         self._fix_mode = "annotate"
         self._fix_mode_var = tk.StringVar(value="annotate")  # 交付模式：annotate / fix / both
         self.status_var = tk.StringVar(value="请按步骤操作")
@@ -431,10 +431,10 @@ class App:
         self._msgs = []
         self.step_defs = [("profile", "提取学校模板要求"),
                           ("check", "论文格式检查"),
-                          ("fix", "选交付方式（批注 / 修正 / 两种都要）")]
+                          ("fix", "选交付方式（只批注 / 只修正 / ①+② 都要）")]
         self.step_desc = ["识别字号、页边距与格式规范",
                           "生成格式检查报告，不动文件",
-                          "可三选一：只批注不改原稿、一键修正、或两种都要"]
+                          "可三选一：只批注不改原稿、一键修正、或 ①+② 都要"]
         self.step_index = 0
 
         self._build_style()
@@ -723,7 +723,7 @@ class App:
         # 导师版交付方式：三个并排按钮（三选一，选中高亮），紧凑省空间
         _mode = tk.Frame(card, bg=PANEL)
         _mode.pack(fill="x", padx=14, pady=(2, 6))
-        tk.Label(_mode, text="交付方式（三选一：可只批注、只修正、或两种都要）", bg=PANEL,
+        tk.Label(_mode, text="交付方式（三选一：只批注 / 只修正 / ①+② 都要）", bg=PANEL,
                  fg="#7a4e0e", font=F_SMALL_B).pack(anchor="w", padx=2, pady=(2, 4))
 
         _btn_row = tk.Frame(_mode, bg=PANEL)
@@ -736,7 +736,7 @@ class App:
                                   font=F_BODY, relief="flat",
                                   command=lambda: self._set_fix_mode("fix"))
         self._btn_fix.pack(side="left", fill="x", expand=True, padx=(0, 4))
-        self._btn_both = tk.Button(_btn_row, text="③ 两种都要",
+        self._btn_both = tk.Button(_btn_row, text="③ ①+② 都要",
                                    font=F_BODY, relief="flat",
                                    command=lambda: self._set_fix_mode("both"))
         self._btn_both.pack(side="left", fill="x", expand=True)
@@ -1076,7 +1076,7 @@ class App:
         self._btn_both.config(**(_on if self._fix_mode == "both" else _off))
 
     def _set_fix_mode(self, mode):
-        """切换第③步交付方式：annotate=只批注不修改（默认）/ fix=一键修正 / both=两种都要。"""
+        """切换第③步交付方式：annotate=只批注不修改（默认）/ fix=一键修正 / both=①+② 都要。"""
         self._fix_mode = mode
         self._fix_mode_var.set(mode)
         self._paint_mode_buttons()
@@ -1554,8 +1554,9 @@ class App:
         # 注意：试用门禁（_trial_ok）已由调用方在进此方法前统一校验一次，避免"两种都要"重复扣次数。
         licensed = trial.is_licensed()
         author = self.author_var.get().strip() or None
-        modes = ["both"] if self._fix_mode == "both" else [self._fix_mode]
+        modes = ["annotate", "fix"] if self._fix_mode == "both" else [self._fix_mode]
         outs = {}
+        profile = self._ensure_profile_ready()  # 画像循环外只提取一次（①+② 都要时两套共用）
         for mode in modes:
             annotate = (mode == "annotate")
             suffix = "_批注副本" if annotate else "_已修正"
@@ -1571,7 +1572,6 @@ class App:
                 rep = base_dst + suffix + "_修改报告.docx"
                 chk = base_dst + suffix + "_检查报告.docx"
             xlsx = os.path.splitext(odst)[0] + "_修改明细.xlsx"  # 导师版偏好 Excel 明细
-            profile = self._ensure_profile_ready()
             # 主交付物：修正/批注后的论文 + 修改明细 Excel（run_* 内部已写盘）
             if annotate:
                 # 生成批注副本：只标不改，comments 作者=署名
@@ -1616,7 +1616,7 @@ class App:
                 self.root.after(0, lambda: self._on_step_error(idx, mode, "试用次数已用完，请激活后使用"))
                 return
             author = self.author_var.get().strip() or None
-            modes = ["both"] if self._fix_mode == "both" else [self._fix_mode]
+            modes = ["annotate", "fix"] if self._fix_mode == "both" else [self._fix_mode]
             mode_label = {"annotate": "生成批注副本",
                           "fix": "一键修正",
                           "both": "批注副本 + 已修正"}[self._fix_mode]
@@ -1845,7 +1845,7 @@ class App:
                                 (base + "_修改报告.docx") if rep else None)
             return
 
-        # 两种都要：弹文件夹，两套一起导出
+        # ①+② 都要：弹文件夹，两套一起导出
         out_dir = filedialog.askdirectory(title="选择保存文件夹（将同时导出批注副本与已修正版）")
         if not out_dir:
             messagebox.showinfo("未导出",
