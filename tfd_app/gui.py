@@ -104,7 +104,7 @@ _FONT_BASE = {
     "F_DIALOG_TITLE": ("KaiTi", 14, "bold"),    # 弹窗标题（楷体）
     "F_ICON":       ("KaiTi", 12, "bold"),      # 印章图标（论 / 模，楷体朱砂）
 }
-APP_VERSION = "1.0.1"   # 与 VERSION 文件保持同步（状态栏显示用）
+APP_VERSION = "1.0.2"   # 与 VERSION 文件保持同步（状态栏显示用）
 _FONTS = {}      # name -> (Font, base_size)
 _CUR_SCALE = 1.0 # 当前窗口缩放比例（宽度 / 基准宽度，钳制 0.8~1.0：只缩小不放大）
 BASE_W = 900     # 设计基准宽度（px），与主窗口默认 900x640 对应
@@ -487,18 +487,20 @@ class App:
                  font=("Microsoft YaHei", 12)).pack(side="right", padx=(0, 8))
         _link(topbar, "关 于", lambda: show_about(self.root)).pack(side="right", padx=(0, 8))
 
-        # 顶部标题区
+        # 顶部标题区：标题与"导师版"徽标同排，节省纵向空间
         header = tk.Frame(self.root, bg=PAPER)
-        header.pack(fill="x", padx=20, pady=(16, 8))
-        tk.Label(header, text="论 文 格 式 医 生", bg=PAPER, fg=INK,
-                 font=F_TITLE).pack(anchor="center")
-        # 导师版徽标（醒目，CC 红底白字圆角 chip）
-        _badge = tk.Frame(header, bg=CINNABAR, padx=12, pady=3)
-        _badge.pack(anchor="center", pady=(6, 0))
-        tk.Label(_badge, text="导 师 版 · 批量批注 · 不改学生原文", bg=CINNABAR,
-                 fg="#ffffff", font=("Microsoft YaHei", 11, "bold")).pack()
+        header.pack(fill="x", padx=20, pady=(14, 6))
+        _title_row = tk.Frame(header, bg=PAPER)
+        _title_row.pack(anchor="center")
+        tk.Label(_title_row, text="论 文 格 式 医 生", bg=PAPER, fg=INK,
+                 font=F_TITLE).pack(side="left")
+        # 导师版徽标（朱砂红底白字圆角 chip，紧跟标题同排）
+        _badge = tk.Frame(_title_row, bg=CINNABAR, padx=9, pady=2)
+        _badge.pack(side="left", padx=(10, 0))
+        tk.Label(_badge, text="导师版", bg=CINNABAR,
+                 fg="#ffffff", font=("Microsoft YaHei", 12, "bold")).pack()
         tk.Label(header, text="THESIS FORMAT DOCTOR · 导师专用 · 高校论文格式规范引擎",
-                 bg=PAPER, fg="#8b8378", font=F_SUBTITLE).pack(anchor="center", pady=(7, 0))
+                 bg=PAPER, fg="#8b8378", font=F_SUBTITLE).pack(anchor="center", pady=(6, 0))
         tk.Frame(self.root, bg=CINNABAR, height=2).pack(fill="x", padx=20)
 
         # 主体两栏（文件选择 | 处理步骤）
@@ -676,43 +678,27 @@ class App:
 
         self._build_timeline(card)
 
-        # 导师版交付方式：把"只批注不修改"和"一键修正"做成两个清晰大卡片（傻瓜式）
-        _mode = tk.Frame(card, bg="#fdf3e7", highlightthickness=1, highlightbackground="#e6c794")
+        # 导师版交付方式：两个并排按钮（二选一，选中高亮），紧凑省空间
+        _mode = tk.Frame(card, bg=PANEL)
         _mode.pack(fill="x", padx=14, pady=(2, 6))
-        tk.Label(_mode, text="第③步 · 选交付方式（两种模式，二选一）", bg="#fdf3e7",
-                 fg="#7a4e0e", font=F_SMALL_B).pack(anchor="w", padx=12, pady=(9, 6))
+        tk.Label(_mode, text="交付方式（二选一）", bg=PANEL,
+                 fg="#7a4e0e", font=F_SMALL_B).pack(anchor="w", padx=2, pady=(2, 4))
 
-        # 交付模式变量（默认"只批注不改原稿"）；注意：原版在 _opt 块内初始化，
-        # 重构卡片时此行若遗漏会导致向导第③步渲染 Radiobutton 时 AttributeError 崩溃。
+        # 交付模式变量（默认"只批注·不改原稿"）
         self._fix_mode_var = tk.StringVar(value="annotate")
 
-        # —— 卡片 A：只批注 · 不改原稿（默认选中、蓝色高亮）——
-        self._card_annotate = tk.Frame(_mode, bg="#ffffff",
-                                       highlightthickness=2, highlightbackground=ACCENT)
-        self._card_annotate.pack(fill="x", padx=12, pady=(0, 8))
-        tk.Radiobutton(self._card_annotate, variable=self._fix_mode_var, value="annotate",
-                       bg="#ffffff", activebackground="#ffffff", fg=INK, font=F_BODY,
-                       command=lambda: self._set_fix_mode("annotate")).pack(anchor="w", padx=10, pady=(8, 0))
-        tk.Label(self._card_annotate, text="① 只批注 · 不改原稿（推荐）", bg="#ffffff",
-                 fg=INK, font=F_SUBTITLE).pack(anchor="w", padx=32)
-        tk.Label(self._card_annotate,
-                 text="学生论文一字不动，只在问题处插入你的署名气泡批注，转发学生自己改。",
-                 bg="#ffffff", fg=MUTED, font=F_FOOT).pack(anchor="w", padx=32)
-        tk.Label(self._card_annotate, text="✔ 原稿不会被改动一个字 · 不破坏学生已有内容",
-                 bg="#ffffff", fg=OKC, font=F_FOOT).pack(anchor="w", padx=32, pady=(0, 9))
-
-        # —— 卡片 B：一键修正 · 直接改好 ——
-        self._card_fix = tk.Frame(_mode, bg="#ffffff",
-                                  highlightthickness=2, highlightbackground="#cfc7b5")
-        self._card_fix.pack(fill="x", padx=12, pady=(0, 10))
-        tk.Radiobutton(self._card_fix, variable=self._fix_mode_var, value="fix",
-                       bg="#ffffff", activebackground="#ffffff", fg=INK, font=F_BODY,
-                       command=lambda: self._set_fix_mode("fix")).pack(anchor="w", padx=10, pady=(8, 0))
-        tk.Label(self._card_fix, text="② 一键修正 · 直接改好", bg="#ffffff",
-                 fg=INK, font=F_SUBTITLE).pack(anchor="w", padx=32)
-        tk.Label(self._card_fix,
-                 text="按学校模板把格式直接改好，生成可交稿文档（原稿另存为副本，不动原件）。",
-                 bg="#ffffff", fg=MUTED, font=F_FOOT).pack(anchor="w", padx=32, pady=(0, 9))
+        _btn_row = tk.Frame(_mode, bg=PANEL)
+        _btn_row.pack(fill="x", padx=2, pady=(0, 2))
+        self._btn_annotate = tk.Button(_btn_row, text="① 只批注·不改原稿（推荐）",
+                                       font=F_BODY, relief="flat",
+                                       command=lambda: self._set_fix_mode("annotate"))
+        self._btn_annotate.pack(side="left", fill="x", expand=True, padx=(0, 6))
+        self._btn_fix = tk.Button(_btn_row, text="② 一键修正·直接改好",
+                                  font=F_BODY, relief="flat",
+                                  command=lambda: self._set_fix_mode("fix"))
+        self._btn_fix.pack(side="left", fill="x", expand=True)
+        # 初始高亮（默认"只批注·不改原稿"）
+        self._paint_mode_buttons()
 
         self.progress = ttk.Progressbar(card, mode="indeterminate")
         self.progress.pack(fill="x", padx=14, pady=(4, 2))
@@ -920,14 +906,22 @@ class App:
         self.profile_path.set("")
         self._update_profile_box()
 
+    def _paint_mode_buttons(self):
+        """按当前 _fix_mode 高亮两个交付方式按钮（选中=朱砂底白字，未选=纸色）。"""
+        if getattr(self, "_btn_annotate", None) is None:
+            return
+        _on = dict(bg=CINNABAR, fg="white", activebackground=CINNABAR_D,
+                   activeforeground="white")
+        _off = dict(bg="#efe9db", fg=INK, activebackground="#ded6c2",
+                    activeforeground=INK)
+        self._btn_annotate.config(**(_on if self._fix_mode == "annotate" else _off))
+        self._btn_fix.config(**(_on if self._fix_mode == "fix" else _off))
+
     def _set_fix_mode(self, mode):
         """切换第③步交付方式：annotate=只批注不修改（默认）/ fix=一键修正。"""
         self._fix_mode = mode
-        if getattr(self, "_card_annotate", None) is not None:
-            self._card_annotate.config(
-                highlightbackground=ACCENT if mode == "annotate" else "#cfc7b5")
-            self._card_fix.config(
-                highlightbackground=ACCENT if mode == "fix" else "#cfc7b5")
+        self._fix_mode_var.set(mode)
+        self._paint_mode_buttons()
         self._refresh_wizard()
 
     # ---------------------------------------------------------------- run（向导）
