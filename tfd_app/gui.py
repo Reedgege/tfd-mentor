@@ -104,7 +104,7 @@ _FONT_BASE = {
     "F_DIALOG_TITLE": ("KaiTi", 14, "bold"),    # 弹窗标题（楷体）
     "F_ICON":       ("KaiTi", 12, "bold"),      # 印章图标（论 / 模，楷体朱砂）
 }
-APP_VERSION = "1.0.10"  # 与 VERSION 文件保持同步（状态栏显示用）
+APP_VERSION = "1.0.11"  # 与 VERSION 文件保持同步（状态栏显示用）
 _FONTS = {}      # name -> (Font, base_size)
 _CUR_SCALE = 1.0 # 当前窗口缩放比例（宽度 / 基准宽度，钳制 0.8~1.0：只缩小不放大）
 BASE_W = 900     # 设计基准宽度（px），与主窗口默认 900x640 对应
@@ -397,10 +397,15 @@ class App:
     def __init__(self, root):
         self.root = root
         self.root.title("论文格式医生 · 导师版")
-        # v1.0.10：再次加大默认窗口尺寸（1280×860），确保左栏+右栏+页脚在 1080p 屏幕
-        # 默认显示比例下都完整露出；最小尺寸也对应加大到 1080×820
-        self.root.geometry("1280x860")
-        self.root.minsize(1080, 820)
+        # v1.0.11：主区已可滚动，窗口不再需要靠"撑得巨大"来露出页脚。
+        # 默认尺寸按屏幕自适应（不超过屏幕 86%×88%），小屏也能容纳；最小尺寸放宽，
+        # 再小的窗口也只是主区内部滚动，页脚 / 状态栏始终可见。
+        _sw = self.root.winfo_screenwidth()
+        _sh = self.root.winfo_screenheight()
+        self.root.geometry("%dx%d" % (min(1180, int(_sw * 0.86)),
+                                      min(880, int(_sh * 0.88))))
+        # 最小宽度 1040：保证 50:50 等分后每栏仍有约 494px，左栏按钮与文件名不会被挤变形
+        self.root.minsize(1040, 600)
         # v1.0.10：Windows 上、且屏幕分辨率 ≥ 1440×900 时启动即最大化，
         # 让页脚/状态栏在最大化窗口里绝对可见（避免用户拖到小窗口时把页脚裁掉）；
         # 1366×768 等小屏幕跳过，让用户保留窗口控制权（最大化后无关闭按钮风险）。
@@ -532,12 +537,24 @@ class App:
         tk.Frame(self.root, bg=CINNABAR, height=2).pack(fill="x", padx=20)
 
         # 主体两栏（文件选择 | 处理步骤）
-        main = tk.Frame(self.root, bg=PAPER)
-        main.pack(fill="both", expand=True, padx=20, pady=14)
-        # 左栏固定 540px（v1.0.10 再次加宽，确保"选择论文…/选择文件夹…"两个 Ghost 按钮能并排完整显示），
-        # 右栏独占剩余空间：处理时进度条等元素增减不会让右栏忽宽忽窄、进而挤压左栏
-        main.columnconfigure(0, weight=0, minsize=540)
-        main.columnconfigure(1, weight=1)
+        # v1.0.11：整块装入可纵向滚动的画布——内容再高也只滚主区，
+        # 下方页脚 / 状态栏始终固定可见（此前内容超高会把他俩挤出窗口底部）。
+        body = tk.Frame(self.root, bg=PAPER)
+        body.pack(fill="both", expand=True, padx=20, pady=14)
+        self._body_cv = tk.Canvas(body, bg=PAPER, highlightthickness=0)
+        _sb = ttk.Scrollbar(body, orient="vertical", command=self._body_cv.yview)
+        self._body_cv.configure(yscrollcommand=_sb.set)
+        _sb.pack(side="right", fill="y")
+        self._body_cv.pack(side="left", fill="both", expand=True)
+
+        main = tk.Frame(self._body_cv, bg=PAPER)
+        _body_win = self._body_cv.create_window((0, 0), window=main, anchor="nw")
+        # 左右严格 50:50 等分。
+        # 关键：仅靠 weight 做不到等宽——grid 先满足各列"固有请求宽度"，右栏内容更宽就会多吃，
+        # 剩下空间才按 weight 分（此前 9:11 实测仍是 43%/57%）。必须用 uniform 把两列
+        # 归为同一尺寸组，tk 才会强制两列等宽；minsize 是小窗口兜底，防止左栏被挤变形。
+        main.columnconfigure(0, weight=1, uniform="half", minsize=470)
+        main.columnconfigure(1, weight=1, uniform="half", minsize=470)
         main.rowconfigure(0, weight=1)
         left = tk.Frame(main, bg=PAPER)
         left.grid(row=0, column=0, sticky="nsew", padx=(0, 12))
@@ -545,6 +562,28 @@ class App:
         right.grid(row=0, column=1, sticky="nsew")
         self._build_left(left)
         self._build_right(right)
+
+        def _sync_body(_e=None):
+            w = self._body_cv.winfo_width()
+            h = self._body_cv.winfo_height()
+            if w > 2:
+                self._body_cv.itemconfig(_body_win, width=w)
+            # 内容比可视区矮 → 撑满（两栏等高，留白匀称）；内容更高 → 按实际高度滚动
+            req = main.winfo_reqheight()
+            if h > 2:
+                self._body_cv.itemconfig(_body_win, height=max(req, h))
+            self._body_cv.configure(scrollregion=self._body_cv.bbox("all"))
+
+        main.bind("<Configure>", _sync_body)
+        self._body_cv.bind("<Configure>", _sync_body)
+
+        def _on_wheel(e):
+            # 焦点在可自行滚动的文本框内时不拦截，避免双重滚动
+            if isinstance(e.widget, tk.Text):
+                return
+            self._body_cv.yview_scroll(int(-1 * (e.delta / 120)), "units")
+
+        self.root.bind_all("<MouseWheel>", _on_wheel)
 
         # 页脚（两行版权，贴底）
         footer = tk.Frame(self.root, bg=PAPER)
