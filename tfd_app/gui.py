@@ -104,7 +104,7 @@ _FONT_BASE = {
     "F_DIALOG_TITLE": ("KaiTi", 14, "bold"),    # 弹窗标题（楷体）
     "F_ICON":       ("KaiTi", 12, "bold"),      # 印章图标（论 / 模，楷体朱砂）
 }
-APP_VERSION = "1.0.5"   # 与 VERSION 文件保持同步（状态栏显示用）
+APP_VERSION = "1.0.6"   # 与 VERSION 文件保持同步（状态栏显示用）
 _FONTS = {}      # name -> (Font, base_size)
 _CUR_SCALE = 1.0 # 当前窗口缩放比例（宽度 / 基准宽度，钳制 0.8~1.0：只缩小不放大）
 BASE_W = 900     # 设计基准宽度（px），与主窗口默认 900x640 对应
@@ -579,17 +579,19 @@ class App:
             card, "模", "学校模板", "可选", MUTED,
             "用于按学校要求检查 / 修正，更贴合要求", "选择…", self._pick_template)
 
-        # 🔒 记住模板（显眼高亮框）：勾选后模板路径存本机，下次打开自动载入，免重复导入
+        # 🔒 记住模板（显眼高亮框 + 小按钮）：点一下"记住此模板"即保存路径到本机，
+        # 下次打开自动载入，免重复导入；按钮变绿=已记住，再点取消。
+        self._tpl_locked = False
         _lock_frame = tk.Frame(card, bg="#fff3df", highlightthickness=1, highlightbackground="#e3a93b")
         _lock_frame.pack(fill="x", padx=14, pady=(2, 6))
-        self._tpl_lock_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(_lock_frame,
-                        text="🔒 记住此模板（下次打开自动载入，不用重新选）",
-                        variable=self._tpl_lock_var,
-                        command=self._toggle_template_lock).pack(side="left", padx=10, pady=6)
-        self._tpl_lock_lbl = tk.Label(_lock_frame, text="当前未记住", bg="#fff3df",
-                                      fg="#9a6a1f", font=F_FOOT)
-        self._tpl_lock_lbl.pack(side="right", padx=10, pady=6)
+        self._lock_btn = tk.Button(
+            _lock_frame, text="🔒 记住此模板", relief="flat", font=F_BODY,
+            bg="#e3a93b", fg="#5a3d12", activebackground="#f0bf5e", activeforeground="#5a3d12",
+            padx=12, pady=5, cursor="hand2", command=self._on_lock_click)
+        self._lock_btn.pack(side="left", padx=10, pady=6)
+        self._lock_tip = tk.Label(_lock_frame, text="", bg="#fff3df",
+                                  fg="#2f7d32", font=F_SMALL_B)
+        self._lock_tip.pack(side="left", padx=(2, 10), pady=6)
 
         # 批注署名：导师名，出现在 Word 批注气泡作者栏（默认"论文格式医生·导师版"）
         _auth_row = tk.Frame(card, bg=PANEL)
@@ -672,6 +674,12 @@ class App:
         tk.Label(card, text="壹 · 选择", bg=PANEL, fg="#b8b0a0",
                  font=F_FOOT).pack(side="bottom", pady=(0, 8))
 
+    @staticmethod
+    def _clip(s, n=40):
+        """中文按字符截断，超长用省略号；用于文件名/模板名显示，避免撑坏布局。"""
+        s = s or ""
+        return s if len(s) <= n else s[:n - 1] + "…"
+
     def _file_row(self, parent, icon, title, mark, mark_color, desc, btn_text, cmd,
                   btn2_text=None, cmd2=None):
         box = tk.Frame(parent, bg="#ffffff", highlightthickness=1, highlightbackground="#e3dccb")
@@ -688,8 +696,9 @@ class App:
         tl.pack(fill="x")
         tk.Label(tl, text=title, bg="#ffffff", fg=INK, font=F_SUBTITLE).pack(side="left")
         tk.Label(tl, text=" " + mark, bg="#ffffff", fg=mark_color, font=F_FOOT).pack(side="left")
-        name_lbl = tk.Label(txt, text=desc, bg="#ffffff", fg=MUTED, font=F_FOOT)
-        name_lbl.pack(anchor="w")
+        name_lbl = tk.Label(txt, text=desc, bg="#ffffff", fg=MUTED, font=F_FOOT,
+                            anchor="w", justify="left", wraplength=380)
+        name_lbl.pack(anchor="w", fill="x")
         # 可选第二按钮（如"选择文件夹"），与第一个并列靠右
         if btn2_text and cmd2:
             ttk.Button(row, text=btn2_text, style="Ghost.TButton", command=cmd2).pack(
@@ -920,11 +929,11 @@ class App:
         if n == 1:
             self._thesis_lbl.config(text="已选择 1 篇论文", fg=INK)
             self._thesis_name.config(
-                text=os.path.basename(self.thesis_paths[0]), fg=INK)
+                text=self._clip(os.path.basename(self.thesis_paths[0])), fg=INK)
         else:
             self._thesis_lbl.config(text="已选择 %d 篇论文" % n, fg=INK)
             self._thesis_name.config(
-                text="已选 %d 篇：%s …" % (n, os.path.basename(self.thesis_paths[0])), fg=INK)
+                text=self._clip("已选 %d 篇：%s …" % (n, os.path.basename(self.thesis_paths[0]))), fg=INK)
 
     def _pick_input(self):
         paths = filedialog.askopenfilenames(
@@ -963,13 +972,13 @@ class App:
             filetypes=[("Word 文档", "*.docx *.doc *.wps"), ("所有文件", "*.*")])
         if p:
             self.template_path.set(p)
-            self._template_name.config(text=os.path.basename(p), fg=INK)
+            self._template_name.config(text=self._clip(os.path.basename(p)), fg=INK)
             self._tpl_dot.config(text="✓", fg=OKC)
             self._tpl_lbl.config(text="模板已选择", fg=INK)
             # 换了新模板：重新允许提取画像（清除"放弃"标记）
             self._profile_abandoned = False
             self._profile_confirmed = False
-            if self._tpl_lock_var.get():
+            if self._tpl_locked:
                 self._save_template_lock(p)
 
     # --------------------------------------------------- 模板锁定（记住模板）
@@ -982,7 +991,9 @@ class App:
             os.makedirs(os.path.dirname(p), exist_ok=True)
             with open(p, "w", encoding="utf-8") as f:
                 json.dump({"path": path}, f, ensure_ascii=False)
-            self._tpl_lock_lbl.config(text="✓ 已记住：" + os.path.basename(path), fg="#2f7d32")
+            self._tpl_locked = True
+            self._paint_lock_btn()
+            self._flash_lock("✓ 已记住，下次打开自动载入")
         except Exception as e:
             self._debug("[模板锁定保存失败] " + str(e))
 
@@ -1003,19 +1014,35 @@ class App:
                 os.remove(p)
         except Exception:
             pass
-        self._tpl_lock_lbl.config(text="当前未记住", fg="#9a6a1f")
+        self._tpl_locked = False
+        self._paint_lock_btn()
+        self._flash_lock("已取消记住")
 
-    def _toggle_template_lock(self):
-        if self._tpl_lock_var.get():
-            p = self.template_path.get().strip()
-            if not (p and os.path.isfile(p)):
-                messagebox.showinfo("先选择模板",
-                                    "请先选择学校模板，再勾选“记住此模板”。")
-                self._tpl_lock_var.set(False)
-                return
-            self._save_template_lock(p)
+    def _paint_lock_btn(self):
+        """根据 _tpl_locked 刷新『记住此模板』按钮样式：绿底=已记住，橙底=未记住。"""
+        if self._tpl_locked:
+            self._lock_btn.config(text="✓ 已记住（点此取消）", bg="#2f7d32", fg="white",
+                                  activebackground="#3c9a40", activeforeground="white")
         else:
+            self._lock_btn.config(text="🔒 记住此模板", bg="#e3a93b", fg="#5a3d12",
+                                  activebackground="#f0bf5e", activeforeground="#5a3d12")
+
+    def _flash_lock(self, msg):
+        """在按钮旁短暂显示提示文字，1.8 秒后清空。"""
+        self._lock_tip.config(text=msg)
+        self._lock_tip.after(1800, lambda: self._lock_tip.config(text=""))
+
+    def _on_lock_click(self):
+        """点『记住此模板』按钮：未记住→保存锁定；已记住→取消。"""
+        if self._tpl_locked:
             self._delete_template_lock()
+            return
+        p = self.template_path.get().strip()
+        if not (p and os.path.isfile(p)):
+            messagebox.showinfo("先选择模板",
+                                "请先选择学校模板，再点“记住此模板”。")
+            return
+        self._save_template_lock(p)
 
     def _restore_template_lock(self):
         """启动时：若已记住模板且文件仍在，自动载入并后台预提取格式画像。"""
@@ -1024,12 +1051,13 @@ class App:
             if p:
                 self._delete_template_lock()  # 模板被移动/删除，清理失效锁定
             return
-        self._tpl_lock_var.set(True)
+        self._tpl_locked = True
+        self._paint_lock_btn()
         self.template_path.set(p)
-        self._template_name.config(text=os.path.basename(p), fg=INK)
+        self._template_name.config(text=self._clip(os.path.basename(p)), fg=INK)
         self._tpl_dot.config(text="✓", fg=OKC)
         self._tpl_lbl.config(text="模板已选择（已记住）", fg=INK)
-        self._tpl_lock_lbl.config(text="✓ 已记住：" + os.path.basename(p), fg="#2f7d32")
+        self._flash_lock("已自动载入记住的模板")
         threading.Thread(target=self._extract_profile, args=(p,), daemon=True).start()
 
     def _clear_profile(self):
@@ -1921,7 +1949,7 @@ class App:
         self._refresh_wizard()
         self._paint_mode_buttons()
         # 已记住的模板：再处理一篇时自动重新载入，免得重复选
-        if self._tpl_lock_var.get():
+        if self._tpl_locked:
             self._restore_template_lock()
 
     # ---------------------------------------------- 内部日志（不展示客户）
