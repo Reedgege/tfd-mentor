@@ -104,7 +104,7 @@ _FONT_BASE = {
     "F_DIALOG_TITLE": ("KaiTi", 14, "bold"),    # 弹窗标题（楷体）
     "F_ICON":       ("KaiTi", 12, "bold"),      # 印章图标（论 / 模，楷体朱砂）
 }
-APP_VERSION = "1.0.8"   # 与 VERSION 文件保持同步（状态栏显示用）
+APP_VERSION = "1.0.9"   # 与 VERSION 文件保持同步（状态栏显示用）
 _FONTS = {}      # name -> (Font, base_size)
 _CUR_SCALE = 1.0 # 当前窗口缩放比例（宽度 / 基准宽度，钳制 0.8~1.0：只缩小不放大）
 BASE_W = 900     # 设计基准宽度（px），与主窗口默认 900x640 对应
@@ -397,8 +397,8 @@ class App:
     def __init__(self, root):
         self.root = root
         self.root.title("论文格式医生 · 导师版")
-        self.root.geometry("900x640")
-        self.root.minsize(800, 580)
+        self.root.geometry("1100x760")
+        self.root.minsize(950, 700)
         try:
             if os.path.isfile(ICON):
                 self.root.iconphoto(True, tk.PhotoImage(file=ICON))
@@ -521,7 +521,7 @@ class App:
         main = tk.Frame(self.root, bg=PAPER)
         main.pack(fill="both", expand=True, padx=20, pady=14)
         # 左栏固定宽度、右栏独占剩余空间：处理时进度条等元素增减不会让右栏忽宽忽窄、进而挤压左栏
-        main.columnconfigure(0, weight=0, minsize=400)
+        main.columnconfigure(0, weight=0, minsize=480)
         main.columnconfigure(1, weight=1)
         main.rowconfigure(0, weight=1)
         left = tk.Frame(main, bg=PAPER)
@@ -686,7 +686,7 @@ class App:
         box = tk.Frame(parent, bg="#ffffff", highlightthickness=1, highlightbackground="#e3dccb")
         box.pack(fill="x", padx=14, pady=6)
         row = tk.Frame(box, bg="#ffffff")
-        row.pack(fill="x", padx=10, pady=8)
+        row.pack(fill="x", padx=10, pady=(8, 4))
         ic = tk.Label(row, text=icon, bg="#ffffff", fg=CINNABAR,
                       font=F_ICON, padx=7, pady=4,
                       highlightthickness=1, highlightbackground=CINNABAR)
@@ -697,14 +697,17 @@ class App:
         tl.pack(fill="x")
         tk.Label(tl, text=title, bg="#ffffff", fg=INK, font=F_SUBTITLE).pack(side="left")
         tk.Label(tl, text=" " + mark, bg="#ffffff", fg=mark_color, font=F_FOOT).pack(side="left")
-        name_lbl = tk.Label(txt, text=desc, bg="#ffffff", fg=MUTED, font=F_FOOT,
-                            anchor="w", justify="left", wraplength=380)
-        name_lbl.pack(anchor="w", fill="x")
-        # 可选第二按钮（如"选择文件夹"），与第一个并列靠右
+        # 按钮单独放一框，始终横向排列在右上角；避免与文件名挤在同一行被撑到换行
+        btn_frame = tk.Frame(row, bg="#ffffff")
+        btn_frame.pack(side="right")
         if btn2_text and cmd2:
-            ttk.Button(row, text=btn2_text, style="Ghost.TButton", command=cmd2).pack(
-                side="right", padx=(0, 6))
-        ttk.Button(row, text=btn_text, style="Ghost.TButton", command=cmd).pack(side="right")
+            ttk.Button(btn_frame, text=btn2_text, style="Ghost.TButton", command=cmd2).pack(
+                side="left", padx=(0, 6))
+        ttk.Button(btn_frame, text=btn_text, style="Ghost.TButton", command=cmd).pack(side="left")
+        # 文件名/说明文字另起一行，宽度随卡片自适应
+        name_lbl = tk.Label(box, text=desc, bg="#ffffff", fg=MUTED, font=F_FOOT,
+                            anchor="w", justify="left", wraplength=360)
+        name_lbl.pack(anchor="w", fill="x", padx=10, pady=(0, 8))
         return box, name_lbl
 
     # --------------------------------------------------------- right panel
