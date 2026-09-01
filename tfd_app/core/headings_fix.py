@@ -1470,12 +1470,15 @@ def fix(src, dst, profile=None, add_comments=True, author=None):
         for _ci in range(min(first_chap + 1, len(paras_list))):
             _cover_paras.add(paras_list[_ci])
     # 图片归一化失败不应阻断整步：原始图片部件由 write_docx_files 原样保留。
-    try:
-        img_changes = _normalize_images(root, profile, skip_paras=_cover_paras)
-        changes.extend(img_changes)
-    except Exception as _e:
-        import traceback as _tb
-        sys.stderr.write("[图片归一化跳过] " + repr(_e) + "\n" + _tb.format_exc() + "\n")
+    img_changes = []
+    if _MODIFY:
+        # 仅"一键修正"模式归一化图片（浮动→内嵌/缩放）；"只批注不改原稿"模式保持原样
+        try:
+            img_changes = _normalize_images(root, profile, skip_paras=_cover_paras)
+            changes.extend(img_changes)
+        except Exception as _e:
+            import traceback as _tb
+            sys.stderr.write("[图片归一化跳过] " + repr(_e) + "\n" + _tb.format_exc() + "\n")
 
     # v1.3.5：识别表格/图片附近字号明显小于正文的短段落（疑似题注/来源说明）。
     # 这些段落保留原格式不被正文规格覆盖，并在批注中提醒用户确认。
@@ -1918,7 +1921,8 @@ def fix(src, dst, profile=None, add_comments=True, author=None):
 
     replacements["word/document.xml"] = to_doc_xml(root)
     # 题注/脚注 pass 可能已往 replacements 写入 footnotes.xml，这里以 document 为基准并集
-    if need_defs:
+    if need_defs and _MODIFY:
+        # 仅"一键修正"模式注入模板标题样式定义；"只批注"模式不改原稿样式表
         try:
             replacements["word/styles.xml"] = _inject_style_defs(src, need_defs)
         except Exception as _e:
