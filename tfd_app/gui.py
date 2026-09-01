@@ -104,7 +104,7 @@ _FONT_BASE = {
     "F_DIALOG_TITLE": ("KaiTi", 14, "bold"),    # 弹窗标题（楷体）
     "F_ICON":       ("KaiTi", 12, "bold"),      # 印章图标（论 / 模，楷体朱砂）
 }
-APP_VERSION = "1.0.7"   # 与 VERSION 文件保持同步（状态栏显示用）
+APP_VERSION = "1.0.8"   # 与 VERSION 文件保持同步（状态栏显示用）
 _FONTS = {}      # name -> (Font, base_size)
 _CUR_SCALE = 1.0 # 当前窗口缩放比例（宽度 / 基准宽度，钳制 0.8~1.0：只缩小不放大）
 BASE_W = 900     # 设计基准宽度（px），与主窗口默认 900x640 对应
@@ -520,7 +520,8 @@ class App:
         # 主体两栏（文件选择 | 处理步骤）
         main = tk.Frame(self.root, bg=PAPER)
         main.pack(fill="both", expand=True, padx=20, pady=14)
-        main.columnconfigure(0, weight=1)
+        # 左栏固定宽度、右栏独占剩余空间：处理时进度条等元素增减不会让右栏忽宽忽窄、进而挤压左栏
+        main.columnconfigure(0, weight=0, minsize=400)
         main.columnconfigure(1, weight=1)
         main.rowconfigure(0, weight=1)
         left = tk.Frame(main, bg=PAPER)
@@ -743,7 +744,8 @@ class App:
         # 初始高亮（默认"只批注·不改原稿"）
         self._paint_mode_buttons()
 
-        self.progress = ttk.Progressbar(card, mode="indeterminate")
+        # length 作保底：某些 ttk 主题下 fill="x" 不一定拉伸，给个较大默认宽，运行时 pack(fill="x") 会撑满右栏
+        self.progress = ttk.Progressbar(card, mode="indeterminate", length=300)
         # 初始隐藏，运行时由 _set_running(True) 再 pack()；避免先 pack 再 forget 残留灰块
 
         self.status_dot = tk.Label(card, text="●", bg=PANEL, fg=MUTED, font=F_BODY)
