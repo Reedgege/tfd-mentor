@@ -38,6 +38,14 @@ def _col_letter(idx):
     return letters
 
 
+def _disp_w(s):
+    """估算单元格显示宽度：中文/全角字符按 2 计，其余按 1（Excel 列宽单位约 1 拉丁字符）。"""
+    n = 0
+    for ch in str(s):
+        n += 2 if ord(ch) > 0x2E80 else 1
+    return n
+
+
 # 样式表（cellXfs 索引即调用方使用的 s 值）：
 # 0 默认 / 1 标题(bold大) / 2 表头(白字朱砂底+居中) /
 # 3 数据格(细边框+左对齐+自动换行) / 4 低置信度(红字+边框) / 5 摘要行(bold+换行)
@@ -91,10 +99,16 @@ def write_change_report_xlsx(path, title, summary, columns, rows):
     col_letters = [_col_letter(i) for i in range(n_cols)]
     last_col = col_letters[-1]
 
-    # 列宽（px / 7 ≈ 字符宽）
+    # 列宽：按每列真实内容自适应，并封顶（避免"内容摘要"等列被写死成 300+ 字符宽）。
+    # 取表头与各单元格中最长显示宽度，限制在区间 [_MIN_W, _MAX_W] 内；超出部分靠自动换行 + 行高自适应解决。
+    _MIN_W, _MAX_W = 8, 46
     cols_xml = []
-    for i, (name, w) in enumerate(columns):
-        cw = max(8, int(round(w / 7.0)))
+    for i, (name, _w) in enumerate(columns):
+        m = _disp_w(name)
+        for row in rows:
+            if i < len(row) and row[i] is not None:
+                m = max(m, _disp_w(row[i]))
+        cw = max(_MIN_W, min(_MAX_W, m))
         cols_xml.append('<col min="%d" max="%d" width="%d" customWidth="1"/>' % (i + 1, i + 1, cw))
     cols_xml = "<cols>" + "".join(cols_xml) + "</cols>"
 

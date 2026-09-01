@@ -104,7 +104,7 @@ _FONT_BASE = {
     "F_DIALOG_TITLE": ("KaiTi", 14, "bold"),    # 弹窗标题（楷体）
     "F_ICON":       ("KaiTi", 12, "bold"),      # 印章图标（论 / 模，楷体朱砂）
 }
-APP_VERSION = "1.0.4"   # 与 VERSION 文件保持同步（状态栏显示用）
+APP_VERSION = "1.0.5"   # 与 VERSION 文件保持同步（状态栏显示用）
 _FONTS = {}      # name -> (Font, base_size)
 _CUR_SCALE = 1.0 # 当前窗口缩放比例（宽度 / 基准宽度，钳制 0.8~1.0：只缩小不放大）
 BASE_W = 900     # 设计基准宽度（px），与主窗口默认 900x640 对应
@@ -414,9 +414,9 @@ class App:
         self.template_path = tk.StringVar()
         self.profile_path = tk.StringVar()
         self.author_var = tk.StringVar(value="论文格式医生·导师版")  # 批注署名（导师名）
-        # 导师版默认交付：先"生成批注副本"（只标不改，可转发学生），其次"一键修正"
+        # 导师版交付方式：批注副本 / 一键修正 / 两种都要（三选一，默认只批注不改原稿）
         self._fix_mode = "annotate"
-        self._fix_mode_var = tk.StringVar(value="annotate")  # 交付模式变量（默认只批注不改原稿）
+        self._fix_mode_var = tk.StringVar(value="annotate")  # 交付模式：annotate / fix / both
         self.status_var = tk.StringVar(value="请按步骤操作")
         self.running = False
         self._dialog_open = False   # 保存对话框打开期间防重复弹窗
@@ -425,20 +425,21 @@ class App:
         # 已保存文件记录：同一会话内再次保存到同一文件时弹“已保存过，是否再次保存”
         self._check_report_saved = None   # 第②步检查报告已保存路径
         self._fix_saved = set()           # 第③步修正产出文件已保存路径集合
-        self._fix_out = None              # 第③步修正完成后的临时产出 (dst, chk, rep)
+        self._fix_outs = {}               # 第③步修正完成后的临时产出：{mode: (dst, chk, rep)}
         self._fix_phase = "idle"          # 第③步子状态：idle→fixed→saved（驱动按钮三态）
         self._errored = False
         self._msgs = []
         self.step_defs = [("profile", "提取学校模板要求"),
                           ("check", "论文格式检查"),
-                          ("fix", "选交付方式（只批注 or 修正）")]
+                          ("fix", "选交付方式（批注 / 修正 / 两种都要）")]
         self.step_desc = ["识别字号、页边距与格式规范",
                           "生成格式检查报告，不动文件",
-                          "二选一：只批注不改原稿，或直接改好"]
+                          "可三选一：只批注不改原稿、一键修正、或两种都要"]
         self.step_index = 0
 
         self._build_style()
         self._build_widgets()
+        self._restore_template_lock()
 
     # -------------------------------------------------- 窗口缩放自适应
     def _on_resize(self, _evt=None):
@@ -571,10 +572,24 @@ class App:
 
         self._thesis_box, self._thesis_name = self._file_row(
             card, "论", "待处理论文", "必选", CINNABAR,
-            "可多选 · 批量导入 Word 文档 .docx / .doc / .wps", "选择…", self._pick_input)
+            "可多选，或整文件夹批量导入（.docx / .doc / .wps）",
+            "选择论文…", self._pick_input,
+            btn2_text="选择文件夹…", cmd2=self._pick_folder)
         self._template_box, self._template_name = self._file_row(
             card, "模", "学校模板", "可选", MUTED,
             "用于按学校要求检查 / 修正，更贴合要求", "选择…", self._pick_template)
+
+        # 🔒 记住模板（显眼高亮框）：勾选后模板路径存本机，下次打开自动载入，免重复导入
+        _lock_frame = tk.Frame(card, bg="#fff3df", highlightthickness=1, highlightbackground="#e3a93b")
+        _lock_frame.pack(fill="x", padx=14, pady=(2, 6))
+        self._tpl_lock_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(_lock_frame,
+                        text="🔒 记住此模板（下次打开自动载入，不用重新选）",
+                        variable=self._tpl_lock_var,
+                        command=self._toggle_template_lock).pack(side="left", padx=10, pady=6)
+        self._tpl_lock_lbl = tk.Label(_lock_frame, text="当前未记住", bg="#fff3df",
+                                      fg="#9a6a1f", font=F_FOOT)
+        self._tpl_lock_lbl.pack(side="right", padx=10, pady=6)
 
         # 批注署名：导师名，出现在 Word 批注气泡作者栏（默认"论文格式医生·导师版"）
         _auth_row = tk.Frame(card, bg=PANEL)
@@ -657,7 +672,8 @@ class App:
         tk.Label(card, text="壹 · 选择", bg=PANEL, fg="#b8b0a0",
                  font=F_FOOT).pack(side="bottom", pady=(0, 8))
 
-    def _file_row(self, parent, icon, title, mark, mark_color, desc, btn_text, cmd):
+    def _file_row(self, parent, icon, title, mark, mark_color, desc, btn_text, cmd,
+                  btn2_text=None, cmd2=None):
         box = tk.Frame(parent, bg="#ffffff", highlightthickness=1, highlightbackground="#e3dccb")
         box.pack(fill="x", padx=14, pady=6)
         row = tk.Frame(box, bg="#ffffff")
@@ -674,6 +690,10 @@ class App:
         tk.Label(tl, text=" " + mark, bg="#ffffff", fg=mark_color, font=F_FOOT).pack(side="left")
         name_lbl = tk.Label(txt, text=desc, bg="#ffffff", fg=MUTED, font=F_FOOT)
         name_lbl.pack(anchor="w")
+        # 可选第二按钮（如"选择文件夹"），与第一个并列靠右
+        if btn2_text and cmd2:
+            ttk.Button(row, text=btn2_text, style="Ghost.TButton", command=cmd2).pack(
+                side="right", padx=(0, 6))
         ttk.Button(row, text=btn_text, style="Ghost.TButton", command=cmd).pack(side="right")
         return box, name_lbl
 
@@ -691,25 +711,26 @@ class App:
 
         self._build_timeline(card)
 
-        # 导师版交付方式：两个并排按钮（二选一，选中高亮），紧凑省空间
+        # 导师版交付方式：三个并排按钮（三选一，选中高亮），紧凑省空间
         _mode = tk.Frame(card, bg=PANEL)
         _mode.pack(fill="x", padx=14, pady=(2, 6))
-        tk.Label(_mode, text="交付方式（二选一）", bg=PANEL,
+        tk.Label(_mode, text="交付方式（三选一：可只批注、只修正、或两种都要）", bg=PANEL,
                  fg="#7a4e0e", font=F_SMALL_B).pack(anchor="w", padx=2, pady=(2, 4))
-
-        # 交付模式变量（默认"只批注·不改原稿"）
-        self._fix_mode_var = tk.StringVar(value="annotate")
 
         _btn_row = tk.Frame(_mode, bg=PANEL)
         _btn_row.pack(fill="x", padx=2, pady=(0, 2))
-        self._btn_annotate = tk.Button(_btn_row, text="① 只批注·不改原稿（推荐）",
+        self._btn_annotate = tk.Button(_btn_row, text="① 只批注·不改原稿",
                                        font=F_BODY, relief="flat",
                                        command=lambda: self._set_fix_mode("annotate"))
-        self._btn_annotate.pack(side="left", fill="x", expand=True, padx=(0, 6))
+        self._btn_annotate.pack(side="left", fill="x", expand=True, padx=(0, 4))
         self._btn_fix = tk.Button(_btn_row, text="② 一键修正·直接改好",
                                   font=F_BODY, relief="flat",
                                   command=lambda: self._set_fix_mode("fix"))
-        self._btn_fix.pack(side="left", fill="x", expand=True)
+        self._btn_fix.pack(side="left", fill="x", expand=True, padx=(0, 4))
+        self._btn_both = tk.Button(_btn_row, text="③ 两种都要",
+                                   font=F_BODY, relief="flat",
+                                   command=lambda: self._set_fix_mode("both"))
+        self._btn_both.pack(side="left", fill="x", expand=True)
         # 初始高亮（默认"只批注·不改原稿"）
         self._paint_mode_buttons()
 
@@ -810,7 +831,9 @@ class App:
             self._prev_btn.config(text="上一步", state="disabled", command=self._go_prev)
         elif self.step_index == n - 1:
             # 第三步：依交付模式（批注副本 / 一键修正）显示按钮（由 _fix_phase 驱动）
-            _fix_label = "生成批注副本" if self._fix_mode == "annotate" else "一键修正"
+            _fix_label = {"annotate": "生成批注副本",
+                          "fix": "一键修正",
+                          "both": "生成批注副本 + 已修正版"}[self._fix_mode]
             if self._fix_phase == "idle":
                 self._next_btn.config(text=_fix_label, command=self._run_step,
                                       state="disabled" if self.running else "normal")
@@ -884,6 +907,25 @@ class App:
         messagebox.showerror(title, msg)
 
     # --------------------------------------------------------------- picks
+    def _update_thesis_status(self):
+        """根据已选论文数刷新『待处理论文』那行的显示：已选择 N 篇论文。"""
+        n = len(getattr(self, "thesis_paths", []))
+        if n == 0:
+            self._thesis_lbl.config(text="未选择论文", fg=MUTED)
+            self._thesis_name.config(
+                text="可多选，或整文件夹批量导入（.docx / .doc / .wps）", fg=MUTED)
+            self._thesis_dot.config(text="○", fg=MUTED)
+            return
+        self._thesis_dot.config(text="✓", fg=OKC)
+        if n == 1:
+            self._thesis_lbl.config(text="已选择 1 篇论文", fg=INK)
+            self._thesis_name.config(
+                text=os.path.basename(self.thesis_paths[0]), fg=INK)
+        else:
+            self._thesis_lbl.config(text="已选择 %d 篇论文" % n, fg=INK)
+            self._thesis_name.config(
+                text="已选 %d 篇：%s …" % (n, os.path.basename(self.thesis_paths[0])), fg=INK)
+
     def _pick_input(self):
         paths = filedialog.askopenfilenames(
             title="选择待处理论文（可多选批量导入）",
@@ -892,15 +934,28 @@ class App:
             self.thesis_paths = list(paths)
             # 兼容旧引用：thesis_path 取首篇，供报告命名等使用
             self.thesis_path.set(self.thesis_paths[0])
-            if len(self.thesis_paths) == 1:
-                self._thesis_name.config(text=os.path.basename(self.thesis_paths[0]), fg=INK)
-                self._thesis_lbl.config(text="论文已选择", fg=INK)
-            else:
-                self._thesis_name.config(
-                    text="已选 %d 篇：%s …" % (len(self.thesis_paths),
-                                              os.path.basename(self.thesis_paths[0])), fg=INK)
-                self._thesis_lbl.config(text="已批量导入 %d 篇论文" % len(self.thesis_paths), fg=INK)
-            self._thesis_dot.config(text="✓", fg=OKC)
+            self._update_thesis_status()
+
+    def _pick_folder(self):
+        """选择文件夹：自动收齐其中所有 Word 文档（.docx/.doc/.wps）。"""
+        folder = filedialog.askdirectory(
+            title="选择论文所在文件夹（自动导入其中所有 Word 文档）")
+        if not folder:
+            return
+        exts = (".docx", ".doc", ".wps")
+        files = []
+        for fn in sorted(os.listdir(folder)):
+            if fn.lower().endswith(exts) and os.path.isfile(os.path.join(folder, fn)):
+                files.append(os.path.join(folder, fn))
+        if not files:
+            messagebox.showinfo(
+                "文件夹内无文档",
+                "该文件夹中没有找到 Word 文档（.docx / .doc / .wps）。\n"
+                "请确认论文已放在此文件夹下。")
+            return
+        self.thesis_paths = files
+        self.thesis_path.set(self.thesis_paths[0])
+        self._update_thesis_status()
 
     def _pick_template(self):
         p = filedialog.askopenfilename(
@@ -914,13 +969,75 @@ class App:
             # 换了新模板：重新允许提取画像（清除"放弃"标记）
             self._profile_abandoned = False
             self._profile_confirmed = False
+            if self._tpl_lock_var.get():
+                self._save_template_lock(p)
+
+    # --------------------------------------------------- 模板锁定（记住模板）
+    def _template_lock_path(self):
+        return os.path.join(os.path.expanduser("~"), ".tfd_mentor_license", "template_lock.json")
+
+    def _save_template_lock(self, path):
+        try:
+            p = self._template_lock_path()
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            with open(p, "w", encoding="utf-8") as f:
+                json.dump({"path": path}, f, ensure_ascii=False)
+            self._tpl_lock_lbl.config(text="✓ 已记住：" + os.path.basename(path), fg="#2f7d32")
+        except Exception as e:
+            self._debug("[模板锁定保存失败] " + str(e))
+
+    def _load_template_lock(self):
+        try:
+            p = self._template_lock_path()
+            if not os.path.isfile(p):
+                return None
+            with open(p, "r", encoding="utf-8") as f:
+                return json.load(f).get("path")
+        except Exception:
+            return None
+
+    def _delete_template_lock(self):
+        try:
+            p = self._template_lock_path()
+            if os.path.isfile(p):
+                os.remove(p)
+        except Exception:
+            pass
+        self._tpl_lock_lbl.config(text="当前未记住", fg="#9a6a1f")
+
+    def _toggle_template_lock(self):
+        if self._tpl_lock_var.get():
+            p = self.template_path.get().strip()
+            if not (p and os.path.isfile(p)):
+                messagebox.showinfo("先选择模板",
+                                    "请先选择学校模板，再勾选“记住此模板”。")
+                self._tpl_lock_var.set(False)
+                return
+            self._save_template_lock(p)
+        else:
+            self._delete_template_lock()
+
+    def _restore_template_lock(self):
+        """启动时：若已记住模板且文件仍在，自动载入并后台预提取格式画像。"""
+        p = self._load_template_lock()
+        if not p or not os.path.isfile(p):
+            if p:
+                self._delete_template_lock()  # 模板被移动/删除，清理失效锁定
+            return
+        self._tpl_lock_var.set(True)
+        self.template_path.set(p)
+        self._template_name.config(text=os.path.basename(p), fg=INK)
+        self._tpl_dot.config(text="✓", fg=OKC)
+        self._tpl_lbl.config(text="模板已选择（已记住）", fg=INK)
+        self._tpl_lock_lbl.config(text="✓ 已记住：" + os.path.basename(p), fg="#2f7d32")
+        threading.Thread(target=self._extract_profile, args=(p,), daemon=True).start()
 
     def _clear_profile(self):
         self.profile_path.set("")
         self._update_profile_box()
 
     def _paint_mode_buttons(self):
-        """按当前 _fix_mode 高亮两个交付方式按钮（选中=朱砂底白字，未选=纸色）。"""
+        """按当前 _fix_mode 高亮三个交付方式按钮（选中=朱砂底白字，未选=纸色）。"""
         if getattr(self, "_btn_annotate", None) is None:
             return
         _on = dict(bg=CINNABAR, fg="white", activebackground=CINNABAR_D,
@@ -929,9 +1046,10 @@ class App:
                     activeforeground=INK)
         self._btn_annotate.config(**(_on if self._fix_mode == "annotate" else _off))
         self._btn_fix.config(**(_on if self._fix_mode == "fix" else _off))
+        self._btn_both.config(**(_on if self._fix_mode == "both" else _off))
 
     def _set_fix_mode(self, mode):
-        """切换第③步交付方式：annotate=只批注不修改（默认）/ fix=一键修正。"""
+        """切换第③步交付方式：annotate=只批注不修改（默认）/ fix=一键修正 / both=两种都要。"""
         self._fix_mode = mode
         self._fix_mode_var.set(mode)
         self._paint_mode_buttons()
@@ -1001,8 +1119,9 @@ class App:
         self._set_running(True)
         status = {"profile": "正在提取学校模板要求…",
                   "check": "正在检查论文格式…",
-                  "fix": ("正在生成批注副本…" if self._fix_mode == "annotate"
-                          else "正在按学校要求修正论文…")}[mode]
+                  "fix": {"annotate": "正在生成批注副本…",
+                          "fix": "正在按学校要求修正论文…",
+                          "both": "正在生成批注副本 + 已修正版…"}[self._fix_mode]}[mode]
         self._set_status(status, RUN)
         self._set_bar("running", self.step_defs[idx][1])
         # 点亮当前步
@@ -1050,12 +1169,12 @@ class App:
                     confirmed = self._confirm_profile_if_needed()
                     if confirmed is None:
                         self.profile_path.set("")
-                    done = self._do_fix(src, docx_path, dst)
-                    if done:
-                        self.root.after(0, lambda: self._on_step_done(idx, mode))
-                    else:
-                        # 试用被拦截（次数用完/取消）：停留在当前步并提示
+                    # 试用门禁只校验一次（两种都要时也只扣一次）
+                    if not self._trial_ok():
                         self.root.after(0, self._on_trial_blocked)
+                        return
+                    self._do_fix(src, docx_path, dst)
+                    self.root.after(0, lambda: self._on_step_done(idx, mode))
         except Exception as e:
             self._debug("[错误] " + str(e))
             self.root.after(0, lambda: self._on_step_error(idx, mode, str(e)))
@@ -1403,62 +1522,63 @@ class App:
             self._show_check_done(dst)
 
     def _do_fix(self, src, docx_path, dst):
-        # v1.3.56 试用版：未激活时只能试 N 次，输出带水印；用完弹升级引导。
-        # 返回 True=已产出修正；False=被试用拦截（次数用完/客户取消），不进入完成态。
-        if not self._trial_ok():
-            return False
+        # 第③步修正：按当前 _fix_mode 产出（both=批注副本+已修正版各一套，不重跑论文）。
+        # 产出先落临时目录，待主线程 _export_fix 让客户选保存位置；结果存入 self._fix_outs。
+        # 注意：试用门禁（_trial_ok）已由调用方在进此方法前统一校验一次，避免"两种都要"重复扣次数。
         licensed = trial.is_licensed()
         author = self.author_var.get().strip() or None
-
-        # dst 为 None：先产出到临时目录，待修正完成（主线程 _export_fix）再让客户选保存位置。
-        annotate = (self._fix_mode == "annotate")
-        suffix = "_批注副本" if annotate else "_已修正"
-        if not dst:
-            tmp = tempfile.mkdtemp(prefix="tfd_fix_")
-            base = os.path.join(tmp, os.path.splitext(os.path.basename(src))[0])
-            dst = base + suffix + ".docx"
-            rep = base + suffix + "_修改报告.docx"
-            chk = base + suffix + "_检查报告.docx"
-        else:
-            base_dst = _base_no_ext(dst)
-            rep = base_dst + suffix + "_修改报告.docx"
-            chk = base_dst + suffix + "_检查报告.docx"
-        xlsx = os.path.splitext(dst)[0] + "_修改明细.xlsx"  # 导师版偏好 Excel 明细
-        profile = self._ensure_profile_ready()
-        # 主交付物：修正/批注后的论文 + 修改明细 Excel（run_* 内部已写盘）
-        if annotate:
-            # 生成批注副本：只标不改，comments 作者=署名
-            report = engine.run_annotate(
-                docx_path, dst, profile_path=profile, author=author, xlsx_path=xlsx)
-            rep = None  # 批注副本无"修改报告"（本身未改动）
-            chk = None  # 批注副本也无"检查报告"，置空避免导出时空 copy 引发"导出失败"
-        else:
-            report = engine.run_fix_headings(
-                docx_path, dst, profile_path=profile,
-                report_docx=rep, add_comments=True, author=author, xlsx_path=xlsx)
-        if not licensed:
-            # 试用版：给产出文档加水印+只读保护，并让客户知道正式版可编辑无水印
-            if watermark.apply_watermark(dst):
-                report += ("\n\n> 本预览版带水印且为【只读】文档（编辑需密码，仅作效果预览）；"
-                           "激活码解锁后输出可编辑无水印正式版，可一键交稿。\n")
+        modes = ["both"] if self._fix_mode == "both" else [self._fix_mode]
+        outs = {}
+        for mode in modes:
+            annotate = (mode == "annotate")
+            suffix = "_批注副本" if annotate else "_已修正"
+            if not dst:
+                tmp = tempfile.mkdtemp(prefix="tfd_fix_")
+                base = os.path.join(tmp, os.path.splitext(os.path.basename(src))[0])
+                odst = base + suffix + ".docx"
+                rep = base + suffix + "_修改报告.docx"
+                chk = base + suffix + "_检查报告.docx"
             else:
-                self._debug("[试用水印注入失败，已跳过]")
-        self._debug(report)
-        # 修改明细报告若因引擎内报告环节异常未落盘，置空（主交付物不受影响）
-        if rep and not os.path.isfile(rep):
-            rep = None
-        # 次要交付物：修正后的检查报告（生成失败不应阻断主交付物）
-        if not annotate:
-            try:
-                check_report = engine.run_check(dst, profile_path=profile)
-                engine.md_to_docx(check_report, chk)
-                self._debug(check_report)
-            except Exception as e:
-                self._debug("[检查报告生成失败，已跳过] " + str(e))
-                chk = None
+                base_dst = _base_no_ext(dst)
+                odst = base_dst + suffix + ".docx"
+                rep = base_dst + suffix + "_修改报告.docx"
+                chk = base_dst + suffix + "_检查报告.docx"
+            xlsx = os.path.splitext(odst)[0] + "_修改明细.xlsx"  # 导师版偏好 Excel 明细
+            profile = self._ensure_profile_ready()
+            # 主交付物：修正/批注后的论文 + 修改明细 Excel（run_* 内部已写盘）
+            if annotate:
+                # 生成批注副本：只标不改，comments 作者=署名
+                report = engine.run_annotate(
+                    docx_path, odst, profile_path=profile, author=author, xlsx_path=xlsx)
+                rep = None  # 批注副本无"修改报告"（本身未改动）
+                chk = None  # 批注副本也无"检查报告"，置空避免导出时空 copy 引发"导出失败"
+            else:
+                report = engine.run_fix_headings(
+                    docx_path, odst, profile_path=profile,
+                    report_docx=rep, add_comments=True, author=author, xlsx_path=xlsx)
+            if not licensed:
+                # 试用版：给产出文档加水印+只读保护，并让客户知道正式版可编辑无水印
+                if watermark.apply_watermark(odst):
+                    report += ("\n\n> 本预览版带水印且为【只读】文档（编辑需密码，仅作效果预览）；"
+                               "激活码解锁后输出可编辑无水印正式版，可一键交稿。\n")
+                else:
+                    self._debug("[试用水印注入失败，已跳过]")
+            self._debug(report)
+            # 修改明细报告若因引擎内报告环节异常未落盘，置空（主交付物不受影响）
+            if rep and not os.path.isfile(rep):
+                rep = None
+            # 次要交付物：修正后的检查报告（生成失败不应阻断主交付物）
+            if not annotate:
+                try:
+                    check_report = engine.run_check(odst, profile_path=profile)
+                    engine.md_to_docx(check_report, chk)
+                    self._debug(check_report)
+                except Exception as e:
+                    self._debug("[检查报告生成失败，已跳过] " + str(e))
+                    chk = None
+            outs[mode] = (odst, chk, rep)
         # 结果落到临时文件，交给主线程在「修正完成」后导出（先修正、后导出）
-        self._fix_out = (dst, chk, rep)
-        return True
+        self._fix_outs = outs
 
     # ----------------------------------------------------- 批量处理（导师版核心）
     def _batch_worker(self, idx, mode, out_dir):
@@ -1469,8 +1589,10 @@ class App:
                 self.root.after(0, lambda: self._on_step_error(idx, mode, "试用次数已用完，请激活后使用"))
                 return
             author = self.author_var.get().strip() or None
-            annotate = (self._fix_mode == "annotate")
-            mode_label = "生成批注副本" if annotate else "一键修正"
+            modes = ["both"] if self._fix_mode == "both" else [self._fix_mode]
+            mode_label = {"annotate": "生成批注副本",
+                          "fix": "一键修正",
+                          "both": "批注副本 + 已修正"}[self._fix_mode]
             # 批量只在首篇确认一次画像；后续沿用同一要求
             profile = self._confirm_profile_if_needed()
             # 注意：_confirm_profile_if_needed 在 worker 内用 Event 等待主线程弹窗，安全
@@ -1487,40 +1609,42 @@ class App:
                 if note:
                     self._debug(note)
                 base = os.path.splitext(os.path.basename(src))[0]
-                suffix = "_批注副本" if annotate else "_已修正"
-                dst = os.path.join(out_dir, base + suffix + ".docx")
-                xlsx = os.path.join(out_dir, base + suffix + "_修改明细.xlsx")
-                chk = os.path.join(out_dir, base + suffix + "_检查报告.docx")
                 try:
-                    if annotate:
-                        engine.run_annotate(docx_path, dst, profile_path=profile,
-                                            author=author, xlsx_path=xlsx)
-                        out_note = "批注副本：%s" % os.path.basename(dst)
-                    else:
-                        rep = os.path.join(out_dir, base + suffix + "_修改报告.docx")
-                        engine.run_fix_headings(docx_path, dst, profile_path=profile,
-                                                report_docx=rep, add_comments=True,
+                    for m in modes:
+                        annotate = (m == "annotate")
+                        suffix = "_批注副本" if annotate else "_已修正"
+                        dst = os.path.join(out_dir, base + suffix + ".docx")
+                        xlsx = os.path.join(out_dir, base + suffix + "_修改明细.xlsx")
+                        chk = os.path.join(out_dir, base + suffix + "_检查报告.docx")
+                        if annotate:
+                            engine.run_annotate(docx_path, dst, profile_path=profile,
                                                 author=author, xlsx_path=xlsx)
-                        try:
-                            cr = engine.run_check(dst, profile_path=profile)
-                            engine.md_to_docx(cr, chk)
-                        except Exception as e:
-                            self._debug("[批量检查报告失败] " + str(e))
-                            chk = None
-                        out_note = "修正稿：%s" % os.path.basename(dst)
-                    rows.append([str(i), os.path.basename(src), mode_label, out_note,
-                                 "明细见 %s" % os.path.basename(xlsx)])
-                    # 全组共性问题：原始稿体检 → 归类 → 跨篇聚合（导师组会汇报用）
-                    try:
-                        _grp_md = engine.run_check(docx_path, profile_path=profile)
-                        _grps = [classify_issue(m) for m in extract_issues_from_markdown(_grp_md)]
-                        if _grps:
-                            group_cats.append((os.path.basename(src), _grps))
-                    except Exception as e:
-                        self._debug("[全组共性问题采集失败，已跳过] " + str(e))
+                            out_note = "批注副本：%s" % os.path.basename(dst)
+                        else:
+                            rep = os.path.join(out_dir, base + suffix + "_修改报告.docx")
+                            engine.run_fix_headings(docx_path, dst, profile_path=profile,
+                                                    report_docx=rep, add_comments=True,
+                                                    author=author, xlsx_path=xlsx)
+                            try:
+                                cr = engine.run_check(dst, profile_path=profile)
+                                engine.md_to_docx(cr, chk)
+                            except Exception as e:
+                                self._debug("[批量检查报告失败] " + str(e))
+                                chk = None
+                            out_note = "修正稿：%s" % os.path.basename(dst)
+                        rows.append([str(i), os.path.basename(src), mode_label, out_note,
+                                     "明细见 %s" % os.path.basename(xlsx)])
                 except Exception as e:
                     self._debug("[批量处理失败] %s → %s" % (src, e))
                     rows.append([str(i), os.path.basename(src), mode_label, "（处理失败）", "错误：%s" % e])
+                # 全组共性问题：原始稿体检 → 归类 → 跨篇聚合（导师组会汇报用）
+                try:
+                    _grp_md = engine.run_check(docx_path, profile_path=profile)
+                    _grps = [classify_issue(m) for m in extract_issues_from_markdown(_grp_md)]
+                    if _grps:
+                        group_cats.append((os.path.basename(src), _grps))
+                except Exception as e:
+                    self._debug("[全组共性问题采集失败，已跳过] " + str(e))
             # 汇总 Excel
             summary = ["批量处理模式：%s" % mode_label,
                        "共 %d 篇，署名：%s" % (total, author or "论文格式医生·导师版"),
@@ -1636,10 +1760,10 @@ class App:
 
         同一会话内已导出过则先弹“已保存过，是否再次保存（覆盖）”。
         """
-        out = getattr(self, "_fix_out", None)
-        if not out:
+        outs = getattr(self, "_fix_outs", None) or {}
+        if not outs:
             return
-        tmp_dst, chk, rep = out
+        modes = sorted(outs.keys())
         if self._fix_saved:
             prev = sorted(self._fix_saved)
             if not messagebox.askyesno(
@@ -1648,48 +1772,84 @@ class App:
                     % "\n".join(os.path.basename(p) for p in prev)):
                 return
         base_src = _base_no_ext(self.thesis_path.get().strip() or "论文")
-        _suffix = "_批注副本" if self._fix_mode == "annotate" else "_已修正"
-        dst = filedialog.asksaveasfilename(
-            title="选择保存位置",
-            initialfile=os.path.basename(base_src) + _suffix + ".docx",
-            initialdir=os.path.dirname(base_src) or None,
-            defaultextension=".docx",
-            filetypes=[("Word 文档", "*.docx")])
-        if not dst:
-            messagebox.showinfo("未导出",
-                                "未选择保存位置，本次结果未导出。\n"
-                                "如需导出，请点“上一步”回到第③步重新执行。")
-            return
-        try:
+        saved = set()
+        temp_dirs = set()
+
+        def _copy_set(tmp_dst, chk, rep, dst):
+            """把一套产出（论文/报告/检查/明细）复制到 dst，并记录已保存与临时目录。"""
             base = _base_no_ext(dst)
             shutil.copy(tmp_dst, dst)
-            saved = {dst}
+            saved.add(dst)
             if rep:
                 shutil.copy(rep, base + "_修改报告.docx")
                 saved.add(base + "_修改报告.docx")
             if chk:
                 shutil.copy(chk, base + "_检查报告.docx")
                 saved.add(base + "_检查报告.docx")
-            # 同名修改明细 Excel 一并带出（导师版偏好）
             _src_xlsx = os.path.splitext(tmp_dst)[0] + "_修改明细.xlsx"
             if os.path.isfile(_src_xlsx):
                 shutil.copy(_src_xlsx, base + "_修改明细.xlsx")
                 saved.add(base + "_修改明细.xlsx")
-            self._fix_saved = saved
+            temp_dirs.add(os.path.dirname(tmp_dst))
+
+        if len(modes) == 1:
+            m = modes[0]
+            tmp_dst, chk, rep = outs[m]
+            _suffix = "_批注副本" if m == "annotate" else "_已修正"
+            dst = filedialog.asksaveasfilename(
+                title="选择保存位置",
+                initialfile=os.path.basename(base_src) + _suffix + ".docx",
+                initialdir=os.path.dirname(base_src) or None,
+                defaultextension=".docx",
+                filetypes=[("Word 文档", "*.docx")])
+            if not dst:
+                messagebox.showinfo("未导出",
+                                    "未选择保存位置，本次结果未导出。\n"
+                                    "如需导出，请点“上一步”回到第③步重新执行。")
+                return
+            try:
+                _copy_set(tmp_dst, chk, rep, dst)
+            except Exception as e:
+                messagebox.showerror("导出失败", str(e) + HELP_HINT)
+                return
+            base = _base_no_ext(dst)
+            self._finish_export(saved, temp_dirs, dst,
+                                (base + "_检查报告.docx") if chk else None,
+                                (base + "_修改报告.docx") if rep else None)
+            return
+
+        # 两种都要：弹文件夹，两套一起导出
+        out_dir = filedialog.askdirectory(title="选择保存文件夹（将同时导出批注副本与已修正版）")
+        if not out_dir:
+            messagebox.showinfo("未导出",
+                                "未选择保存文件夹，本次结果未导出。\n"
+                                "如需导出，请点“上一步”回到第③步重新执行。")
+            return
+        try:
+            for m in modes:
+                tmp_dst, chk, rep = outs[m]
+                suffix = "_批注副本" if m == "annotate" else "_已修正"
+                dst = os.path.join(out_dir, os.path.basename(base_src) + suffix + ".docx")
+                _copy_set(tmp_dst, chk, rep, dst)
         except Exception as e:
             messagebox.showerror("导出失败", str(e) + HELP_HINT)
             return
-        # 导出完成：清理修正临时产出目录（系统 temp，客户无感，不残留 tfd_fix_*）
+        self._finish_export(saved, temp_dirs,
+                            os.path.join(out_dir, os.path.basename(base_src) + "_已修正.docx"),
+                            None, None)
+
+    def _finish_export(self, saved, temp_dirs, dst, chk_path, rep_path):
+        """收尾：记录已保存、清理临时目录、进入“完成”态并弹完成提示。"""
+        self._fix_saved = saved
         try:
-            shutil.rmtree(os.path.dirname(tmp_dst), ignore_errors=True)
+            for d in temp_dirs:
+                shutil.rmtree(d, ignore_errors=True)
         except Exception:
             pass
-        # 导出成功 → 进入“完成”子状态（按钮变“完成”，上一步变“再处理一篇”）
         self._fix_phase = "saved"
         self._set_status("已保存，可再处理一篇", OKC)
         self._refresh_wizard()
-        self._show_fix_done(dst, (base + "_检查报告.docx") if chk else None,
-                           base + "_修改报告.docx")
+        self._show_fix_done(dst, chk_path, rep_path)
 
     def _modal(self, title, text, buttons):
         result = {"v": None}
@@ -1742,7 +1902,7 @@ class App:
         self._profile_abandoned = False
         self._check_report_saved = None
         self._fix_saved = set()
-        self._fix_out = None
+        self._fix_outs = {}
         self._fix_phase = "idle"
         self.thesis_paths = []
         self._fix_mode = "annotate"
@@ -1750,16 +1910,19 @@ class App:
         self.thesis_path.set("")
         self.template_path.set("")
         self.profile_path.set("")
-        self._thesis_name.config(text="Word 文档 .docx / .doc / .wps", fg=MUTED)
         self._template_name.config(text="用于按学校要求检查 / 修正，更贴合要求", fg=MUTED)
         self._thesis_dot.config(text="○", fg=MUTED)
-        self._thesis_lbl.config(text="未选择论文", fg=MUTED)
+        self._update_thesis_status()
         self._tpl_dot.config(text="○", fg=MUTED)
         self._tpl_lbl.config(text="模板未选（可选）", fg=MUTED)
         self._update_profile_box()
         self._set_status("请按步骤操作", MUTED)
         self._set_bar("idle")
         self._refresh_wizard()
+        self._paint_mode_buttons()
+        # 已记住的模板：再处理一篇时自动重新载入，免得重复选
+        if self._tpl_lock_var.get():
+            self._restore_template_lock()
 
     # ---------------------------------------------- 内部日志（不展示客户）
     def _debug(self, text):
@@ -2154,8 +2317,11 @@ def show_help(parent):
     section("一、怎么用")
     steps = [
         ("1. 导入论文",
-         "在主界面「文件选择」中，先选择论文文件（.docx / .doc）。"
-         "导入后软件进入向导模式，引领你完成后续各步。"),
+         "在主界面「文件选择」中导入待处理的论文（.docx / .doc / .wps）。"
+         "有两个按钮：\n"
+         "·「选择论文…」：逐个或按住 Ctrl 多选文件；\n"
+         "·「选择文件夹…」：若学生论文都放在同一个文件夹里，点它即可自动收齐该文件夹内的所有 Word 文档，无需一篇篇选。\n"
+         "下方会实时显示「已选择 N 篇论文」。导入后软件进入向导模式，引领你完成后续各步。"),
         ("2. 导入学校模板",
          "仍在「文件选择」处，选择学校下发的格式要求文件（Word 模板或格式规范文档均可）。"
          "模板若带批注更佳：批注常写明具体要求，如「一级标题用黑体小二、居中」；"
@@ -2194,6 +2360,11 @@ def show_help(parent):
         ("Q8 · 打开软件时 Windows 弹出“已保护你的电脑 / 已拦截”提示？",
          "本软件为未签名程序（省去每年数百元代码签名证书费用，让价格更亲民），Windows SmartScreen 会拦截提示，属正常现象，不代表软件有害。\n"
          "处理方式：在拦截框点击【详细信息】→ 再点击【仍要运行】即可正常打开；官网 reedskill.com 的“激活教程”页有图文演示。"),
+        ("Q9 · 学生论文很多，一篇篇选太麻烦？",
+         "用「选择文件夹…」按钮：把学生论文统一放进一个文件夹，点此按钮，"
+         "软件会自动收齐其中的全部 Word 文档（.docx / .doc / .wps），"
+         "下方即时显示「已选择 N 篇论文」，随后可批量处理。\n"
+         "注意：只扫描该文件夹内的文件，不会翻入其子文件夹，以免误选不相关的文档。"),
     ]
     for title, body in faqs:
         item(title, body)
