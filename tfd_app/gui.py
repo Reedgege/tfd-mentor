@@ -744,8 +744,7 @@ class App:
         self._paint_mode_buttons()
 
         self.progress = ttk.Progressbar(card, mode="indeterminate")
-        self.progress.pack(fill="x", padx=14, pady=(4, 2))
-        self.progress.pack_forget()
+        # 初始隐藏，运行时由 _set_running(True) 再 pack()；避免先 pack 再 forget 残留灰块
 
         self.status_dot = tk.Label(card, text="●", bg=PANEL, fg=MUTED, font=F_BODY)
         self.status_dot.pack(side="left", padx=(14, 6), pady=(8, 4))
