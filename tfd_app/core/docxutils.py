@@ -122,8 +122,18 @@ def _ppr_to_dict(ppr):
     return pinfo
 
 
-def paragraphs(root):
-    """遍历正文段落，返回 [{text, style, rpr, pPr, in_table}]。style 为 w:pStyle 的 val。"""
+def paragraphs(root, styles_map=None):
+    """遍历正文段落，返回 [{text, style, rpr, pPr, in_table, in_toc}]。style 为 w:pStyle 的 val。
+
+    in_toc：该段属于【目录域】（Word 自动生成的 TOC）。目录条目形如
+    "1.1 研究背景.........3"，极易被标题识别 / 编号检查误判成真实章节
+    （真实踩坑：目录里的 "1.3.10" 被当成同级编号，凭空报出"缺 1.3.3～1.3.9"）。
+    判定三选一命中即可：
+      (a) 段落样式是 TOC 样式（styleId 为 TOC1/TOC2/TOC3 或样式名含"目录"/toc）；
+      (b) 段落内含 TOC 域代码（<w:instrText> 中出现 TOC）；
+      (c) 文本呈"编号 + 前导点 + 页码"的目录条目形态（如 "1.3.1 xxx....12"）。
+    调用方（检查 / 修正）应据 in_toc 跳过：目录由 Word 自动维护，不属于论文格式问题。
+    """
     # 预先收集所有表格内段落元素 id（表格单元格里的 <w:p> 也要算段落）
     table_para_ids = set()
     for tbl in root.iter(WR + "tbl"):
@@ -155,8 +165,47 @@ def paragraphs(root):
                 break
         rpr = _rpr_to_dict(first_run.find(WR + "rPr") if first_run is not None else None)
         res.append({"text": texts, "style": style, "rpr": rpr, "pPr": pinfo,
-                    "in_table": id(p) in table_para_ids})
+                    "in_table": id(p) in table_para_ids,
+                    "in_toc": _para_in_toc(p, texts, style, styles_map)})
     return res
+
+
+# 目录条目形态：以章节编号开头 + 前导点（…/…/...）+ 结尾页码。
+# 例："1.3.1 研究背景............12"、"2.1 文献综述 ………… 5"
+_TOC_LINE_RE = re.compile(
+    r"^\s*(?:第[一二三四五六七八九十百千\d]+[章篇节]|[\d]+(?:\.[\d]+){0,3})"
+    r"[^\.…]{0,80}?[\.…]{3,}\s*\d{1,4}\s*$")
+
+
+def _para_in_toc(p, text, style, styles_map=None):
+    """判断段落是否属于论文目录域（详见 paragraphs() 的 in_toc 说明）。"""
+    if style and is_toc_style_id(style, styles_map):
+        return True
+    # TOC 域代码：现代 Word 把整份目录塞进一个段落（begin…separate…结果…end）
+    for it in p.iter(WR + "instrText"):
+        if it.text and re.search(r"\bTOC\b", it.text, re.I):
+            return True
+    return bool(_TOC_LINE_RE.match(text or ""))
+
+
+def is_toc_style_id(sid, styles_map=None, heading_sids=None):
+    """样式 id 是否为【目录样式】。
+
+    标题样式优先：画像中确认为标题的 styleId（部分学校模板把标题样式命名为 toc 1）
+    即便名字带 toc 也必须按标题处理，不可误跳。
+    """
+    if not sid:
+        return False
+    if heading_sids and sid in heading_sids:
+        return False
+    if re.match(r"^toc\s*\d*$", sid, re.I):
+        return True
+    nm = ((styles_map or {}).get(sid) or {}).get("name") or ""
+    if re.match(r"^toc\b", nm, re.I):
+        return True
+    if "目录" in nm or "table of contents" in nm.lower():
+        return True
+    return False
 
 
 def margins(root):
@@ -198,8 +247,11 @@ def is_toc_residue(text):
     """判断段落文本是否为目录域/书签残留（.doc 转 .docx 时带入的脏数据）。
 
     这些段落会被 detect_heading 误判为标题（如 '1 绪论TC  "Chapter 1 Intro"'），
-    若套样式会污染目录，必须跳过。判定依据：含 'TC ' 标记、英文目录项 'Chapter '、
-    或目录域开关 '\\l '。
+    若套样式会污染目录，必须跳过。判定依据：
+      (a) 含 'TC ' 标记、英文目录项 'Chapter '、或目录域开关 '\\l '；
+      (b) .doc 转 .docx 残留的目录条目：标题编号 + 标题文字 + 末尾【独立页码】，
+          形如 '1 绪论1'、'1.1.1 研究背景1'、'1.2.1 研究思路3'（尾随数字即页码）。
+          真实论文标题绝不会以孤立页码结尾，据此可安全判定为目录残留。
     """
     t = text or ""
     if re.search(r"TC\s", t):
@@ -207,6 +259,15 @@ def is_toc_residue(text):
     if '"Chapter' in t or "Chapter " in t:
         return True
     if re.search(r"\\l[\s\"]", t):
+        return True
+    # (b) 目录条目残留：标题编号/「第X章」+ 文字 + 末尾独立 1~3 位页码
+    #     关键约束：(?<!\d) 保证页码不是更大数字（如年份 2024）的尾数，避免误伤
+    #     '3.2 数据 2024' 这类真标题；页码可直接贴在标题后（.doc 转换残留无空格）
+    #     也可与标题以空格相隔，两种形态都兼容。
+    s = t.strip()
+    if re.match(
+        r'^(?:\d+(?:\.\d+)*|第[一二三四五六七八九十百千\d]+[章篇节])\s+'
+        r'[^\d\s].*?(?<!\d)\d{1,3}\s*$', s):
         return True
     return False
 
