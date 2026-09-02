@@ -104,7 +104,7 @@ _FONT_BASE = {
     "F_DIALOG_TITLE": ("KaiTi", 14, "bold"),    # 弹窗标题（楷体）
     "F_ICON":       ("KaiTi", 12, "bold"),      # 印章图标（论 / 模，楷体朱砂）
 }
-APP_VERSION = "1.0.14"  # 与 VERSION 文件保持同步（状态栏显示用）
+APP_VERSION = "1.0.15"  # 与 VERSION 文件保持同步（状态栏显示用）
 _FONTS = {}      # name -> (Font, base_size)
 _CUR_SCALE = 1.0 # 当前窗口缩放比例（宽度 / 基准宽度，钳制 0.8~1.0：只缩小不放大）
 BASE_W = 900     # 设计基准宽度（px），与主窗口默认 900x640 对应
@@ -445,9 +445,14 @@ class App:
         self._profile_abandoned = False  # v1.3.49：客户在确认页点"放弃"后，本次不再自动重新提取画像
         # 已保存文件记录：同一会话内再次保存到同一文件时弹“已保存过，是否再次保存”
         self._check_report_saved = None   # 第②步检查报告已保存路径
-        self._fix_saved = set()           # 第③步修正产出文件已保存路径集合
+        self._fix_saved = set()           # 第③步修正产出文件已保存路径集合（兼容旧引用）
         self._fix_outs = {}               # 第③步修正完成后的临时产出：{mode: (dst, chk, rep)}
-        self._fix_phase = "idle"          # 第③步子状态：idle→fixed→saved（驱动按钮三态）
+        # v1.0.15：第③步三个交付方式各自独立记录状态（互不覆盖）：
+        #   _fix_phase[mode] = idle→fixed→saved；_exported[mode] = 该方式已保存的文件/文件夹。
+        # 这样切到未导出的方式可正常生成导出；切回已导出的方式按钮显示「已完成」，
+        # 点击提示"已导出过"，确认后可重新生成覆盖，杜绝静默重复导出。
+        self._fix_phase = {}
+        self._exported = {}
         self._errored = False
         self._msgs = []
         self.step_defs = [("profile", "提取学校模板要求"),
@@ -889,15 +894,18 @@ class App:
             self._step_title.append(title)
 
     def _refresh_wizard(self):
-        """根据 step_index / _errored / _fix_phase 重绘时间线、计数与按钮三态。"""
+        """根据 step_index / _errored / 当前交付方式的 _fix_phase 重绘时间线、计数与按钮三态。"""
         n = len(self.step_defs)
+        # 第③步当前交付方式的状态（v1.0.15 起按模式独立：_fix_phase/_exported）
+        _cur_phase = self._fix_phase.get(self._fix_mode, "idle")
+        _cur_done = self._fix_mode in self._exported or _cur_phase in ("fixed", "saved")
         for i, (mode, label) in enumerate(self.step_defs):
             circ = self._step_circle[i]
             title = self._step_title[i]
             line = self._step_line[i]
-            # 第三步（最后一步）修正完成（fixed/saved）也视为完成态
+            # 第三步（最后一步）当前交付方式已生成/已导出也视为完成态
             is_done = i < self.step_index or (
-                i == n - 1 and self._fix_phase in ("fixed", "saved"))
+                i == n - 1 and _cur_done)
             if is_done:
                 circ.config(bg="#ffffff", fg=OKC, highlightbackground=OKC, text="✔")
                 title.config(fg=INK)
@@ -921,21 +929,30 @@ class App:
             self._next_btn.config(text="再处理一篇", command=self._reset_wizard, state="normal")
             self._prev_btn.config(text="上一步", state="disabled", command=self._go_prev)
         elif self.step_index == n - 1:
-            # 第三步：依交付模式（批注副本 / 一键修正）显示按钮（由 _fix_phase 驱动）
+            # 第三步：依交付模式（批注副本 / 一键修正）显示按钮（由该模式的 _fix_phase 驱动）
             _fix_label = {"annotate": "生成批注副本",
                           "fix": "一键修正",
                           "both": "生成批注副本 + 已修正版"}[self._fix_mode]
-            if self._fix_phase == "idle":
+            _phase = self._fix_phase.get(self._fix_mode, "idle")
+            if self._fix_mode in self._exported:
+                # v1.0.15：该交付方式已导出过 → 按钮显示「已完成」，点击提示已导出过，
+                # 确认后可重新生成覆盖；不再静默可点、也不一刀切置灰（用户可随时切其他方式）。
+                self._next_btn.config(text="已完成", command=self._re_export_prompt,
+                                      state="disabled" if self.running else "normal")
+                self._prev_btn.config(text="上一步",
+                                      state="disabled" if self.running else "normal",
+                                      command=self._go_prev)
+            elif _phase == "idle":
                 self._next_btn.config(text=_fix_label, command=self._run_step,
                                       state="disabled" if self.running else "normal")
                 self._prev_btn.config(text="上一步",
                                       state="disabled" if (self.running or self.step_index == 0) else "normal",
                                       command=self._go_prev)
-            elif self._fix_phase == "fixed":
+            elif _phase == "fixed":
                 self._next_btn.config(text="保存结果", command=self._export_fix,
                                       state="disabled" if self.running else "normal")
                 self._prev_btn.config(text="上一步", state="normal", command=self._go_prev)
-            else:  # saved
+            else:  # saved（防御分支：正常已归入 _exported）
                 self._next_btn.config(text="完成", state="disabled")
                 self._prev_btn.config(text="再处理一篇", state="normal",
                                       command=self._reset_wizard)
@@ -968,8 +985,8 @@ class App:
             self._step_line[idx].config(bg=OKC)
         if mode == "fix":
             # 第三步：修正完成→进入“保存修正后论文”子状态（先修正、后导出）。
-            # 不前进到“再处理一篇”，按钮由 _fix_phase 驱动为「保存修正后论文」。
-            self._fix_phase = "fixed"
+            # 不前进到“再处理一篇”，按钮由该交付方式的 _fix_phase 驱动为「保存修正后论文」。
+            self._fix_phase[self._fix_mode] = "fixed"
             self._set_status("修正完成，请点击「保存修正后论文」", OKC)
             self._set_bar("done")
         else:
@@ -981,7 +998,7 @@ class App:
     def _on_step_error(self, idx, mode, err):
         self._errored = True
         if mode == "fix":
-            self._fix_phase = "idle"
+            self._fix_phase[self._fix_mode] = "idle"
         self._set_status("未能完成，请查看提示", ERRC)
         self._set_bar("error")
         self._refresh_wizard()
@@ -1165,6 +1182,31 @@ class App:
         self._paint_mode_buttons()
         self._refresh_wizard()
 
+    def _re_export_prompt(self):
+        """已导出的交付方式：点击「已完成」时提示已导出过，确认后可重新生成导出（覆盖）。
+
+        v1.0.15：三个交付方式可随意切换、各自独立导出；已导出的方式不再静默重复导出，
+        而是先提示已保存位置，由客户决定是否重新生成覆盖。
+        """
+        mode = self._fix_mode
+        saved = (self._exported or {}).get(mode) or set()
+        label = {"annotate": "① 只批注·不改原稿",
+                 "fix": "② 一键修正·直接改好",
+                 "both": "③ ①+② 都要"}[mode]
+        files = "\n".join(os.path.basename(p) for p in sorted(saved)) or "（记录缺失）"
+        if not messagebox.askyesno(
+                "已导出过",
+                "「%s」已导出过，结果已保存：\n%s\n\n"
+                "确定要重新生成并导出（覆盖）吗？\n"
+                "选「否」则可直接切换其他交付方式继续。" % (label, files)):
+            return
+        # 重新生成：退回待生成状态并清除旧导出记录（生成→保存后重新记录），
+        # 走完整第③步流程（产出重新写入 _fix_outs 后再导出）
+        self._fix_phase[mode] = "idle"
+        self._exported.pop(mode, None)
+        self._refresh_wizard()
+        self._run_step()
+
     # ---------------------------------------------------------------- run（向导）
     def _go_prev(self):
         """上一步：回退一个步骤，该步及其后的进度重置为待办，可重新执行。
@@ -1174,8 +1216,11 @@ class App:
         """
         if self.running or self.step_index <= 0:
             return
-        if self.step_index == len(self.step_defs) - 1 and self._fix_phase != "idle":
-            self._fix_phase = "idle"
+        if self.step_index == len(self.step_defs) - 1 and self._fix_phase.get(self._fix_mode, "idle") != "idle":
+            # 上一步 = 明确重做：退回该交付方式的"待生成"状态，并清除其导出记录，
+            # 按钮恢复为「生成…」而非「已完成」（否则 exported 残留会让按钮卡在已完成）。
+            self._fix_phase[self._fix_mode] = "idle"
+            self._exported.pop(self._fix_mode, None)
             self._errored = False
             self._set_status("请按步骤操作", MUTED)
             self._set_bar("idle")
@@ -1815,7 +1860,9 @@ class App:
             self._refresh_wizard()
             self._show_batch_check_done(out_dir, n)
         else:
-            self._fix_phase = "saved"
+            # 批量修正完成：记录当前交付方式已导出（输出文件夹），切回该方式时按钮显示「已完成」
+            self._fix_phase[self._fix_mode] = "saved"
+            self._exported[self._fix_mode] = {out_dir}
             self._set_status("批量处理完成，已保存至文件夹", OKC)
             self._set_bar("done")
             self._refresh_wizard()
@@ -1914,12 +1961,13 @@ class App:
         if not outs:
             return
         modes = sorted(outs.keys())
-        if self._fix_saved:
-            prev = sorted(self._fix_saved)
+        # v1.0.15：按当前交付方式判断是否已导出过（此前为全局 _fix_saved，切模式后会误判）
+        prev = (self._exported or {}).get(self._fix_mode)
+        if prev:
             if not messagebox.askyesno(
-                    "已保存过",
-                    "修正文件之前已保存过：\n%s\n\n确定要再次生成并保存（覆盖）吗？"
-                    % "\n".join(os.path.basename(p) for p in prev)):
+                    "已导出过",
+                    "该交付方式之前已导出过：\n%s\n\n确定要再次生成并保存（覆盖）吗？"
+                    % "\n".join(sorted(os.path.basename(p) for p in prev))):
                 return
         base_src = _base_no_ext(self.thesis_path.get().strip() or "论文")
         saved = set()
@@ -1989,14 +2037,19 @@ class App:
                             None, None)
 
     def _finish_export(self, saved, temp_dirs, dst, chk_path, rep_path):
-        """收尾：记录已保存、清理临时目录、进入“完成”态并弹完成提示。"""
+        """收尾：记录已保存、清理临时目录、进入“完成”态并弹完成提示。
+
+        v1.0.15：saved 按当前交付方式记录（_fix_phase[mode] + _exported[mode]），
+        三个交付方式可各自完成导出互不覆盖；切回已导出的方式时按钮显示「已完成」。
+        """
         self._fix_saved = saved
         try:
             for d in temp_dirs:
                 shutil.rmtree(d, ignore_errors=True)
         except Exception:
             pass
-        self._fix_phase = "saved"
+        self._fix_phase[self._fix_mode] = "saved"
+        self._exported[self._fix_mode] = set(saved)
         self._set_status("已保存，可再处理一篇", OKC)
         self._refresh_wizard()
         self._show_fix_done(dst, chk_path, rep_path)
@@ -2053,7 +2106,8 @@ class App:
         self._check_report_saved = None
         self._fix_saved = set()
         self._fix_outs = {}
-        self._fix_phase = "idle"
+        self._fix_phase = {}
+        self._exported = {}
         self.thesis_paths = []
         self._fix_mode = "annotate"
         self._fix_mode_var.set("annotate")
