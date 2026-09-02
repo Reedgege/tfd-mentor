@@ -104,7 +104,7 @@ _FONT_BASE = {
     "F_DIALOG_TITLE": ("KaiTi", 14, "bold"),    # 弹窗标题（楷体）
     "F_ICON":       ("KaiTi", 12, "bold"),      # 印章图标（论 / 模，楷体朱砂）
 }
-APP_VERSION = "1.0.11"  # 与 VERSION 文件保持同步（状态栏显示用）
+APP_VERSION = "1.0.12"  # 与 VERSION 文件保持同步（状态栏显示用）
 _FONTS = {}      # name -> (Font, base_size)
 _CUR_SCALE = 1.0 # 当前窗口缩放比例（宽度 / 基准宽度，钳制 0.8~1.0：只缩小不放大）
 BASE_W = 900     # 设计基准宽度（px），与主窗口默认 900x640 对应
@@ -405,7 +405,9 @@ class App:
         self.root.geometry("%dx%d" % (min(1180, int(_sw * 0.86)),
                                       min(880, int(_sh * 0.88))))
         # 最小宽度 1040：保证 50:50 等分后每栏仍有约 494px，左栏按钮与文件名不会被挤变形
-        self.root.minsize(1040, 600)
+        # v1.0.12：最小高度 600→660。实测主区内容需视口≥394px 才能保证"下一步"按钮
+        # 不被 Canvas 裁掉，而视口 = 窗口高 - 261（顶栏+状态栏+页脚+边距），故窗口≥655 才安全。
+        self.root.minsize(1040, 660)
         # v1.0.10：Windows 上、且屏幕分辨率 ≥ 1440×900 时启动即最大化，
         # 让页脚/状态栏在最大化窗口里绝对可见（避免用户拖到小窗口时把页脚裁掉）；
         # 1366×768 等小屏幕跳过，让用户保留窗口控制权（最大化后无关闭按钮风险）。
@@ -770,20 +772,27 @@ class App:
 
     # --------------------------------------------------------- right panel
     def _build_right(self, parent):
+        # v1.0.12：右栏卡片按内容高度自然收住（fill="x"，不再 expand 拉伸到与左栏等高）。
+        # 左栏内容多、右栏内容少，强行等高会让右栏底部空出一大片，观感"右边又大又空"；
+        # 改为两卡顶对齐、各自按内容收边，疏密随内容，按钮位置在所有窗口尺寸下都可预期。
         card = tk.Frame(parent, bg=PANEL, highlightthickness=1, highlightbackground=LINE)
-        card.pack(fill="both", expand=True)
+        card.pack(fill="x", anchor="n")
 
-        hdr = tk.Frame(card, bg=PANEL)
+        # v1.0.12：右栏内容统一走这一个容器，贴顶铺满卡片。
+        _center = tk.Frame(card, bg=PANEL)
+        _center.pack(fill="both", expand=True)
+
+        hdr = tk.Frame(_center, bg=PANEL)
         hdr.pack(fill="x", padx=14, pady=(12, 4))
         tk.Frame(hdr, bg=ACCENT, width=4, height=15).pack(side="left", padx=(0, 7))
         tk.Label(hdr, text="处理步骤", bg=PANEL, fg=INK, font=F_CARD_HDR).pack(side="left")
         self._step_counter = tk.Label(hdr, text="1 / 3", bg=PANEL, fg=MUTED, font=F_FOOT)
         self._step_counter.pack(side="right")
 
-        self._build_timeline(card)
+        self._build_timeline(_center)
 
         # 导师版交付方式：三个并排按钮（三选一，选中高亮），紧凑省空间
-        _mode = tk.Frame(card, bg=PANEL)
+        _mode = tk.Frame(_center, bg=PANEL)
         _mode.pack(fill="x", padx=14, pady=(2, 6))
         tk.Label(_mode, text="交付方式（三选一：只批注 / 只修正 / ①+② 都要）", bg=PANEL,
                  fg="#7a4e0e", font=F_SMALL_B).pack(anchor="w", padx=2, pady=(2, 4))
@@ -805,25 +814,32 @@ class App:
         # 初始高亮（默认"只批注·不改原稿"）
         self._paint_mode_buttons()
 
-        # length 作保底：某些 ttk 主题下 fill="x" 不一定拉伸，给个较大默认宽，运行时 pack(fill="x") 会撑满右栏
-        self.progress = ttk.Progressbar(card, mode="indeterminate", length=300)
-        # 初始隐藏，运行时由 _set_running(True) 再 pack()；避免先 pack 再 forget 残留灰块
-
-        self.status_dot = tk.Label(card, text="●", bg=PANEL, fg=MUTED, font=F_BODY)
-        self.status_dot.pack(side="left", padx=(14, 6), pady=(8, 4))
-        self.status_lbl = tk.Label(card, textvariable=self.status_var, bg=PANEL, fg=INK,
+        # v1.0.12：状态行与激活入口独立成一条横向条带容器，再整体 pack 进垂直流。
+        # 此前直接对 card 用 side="left"/"right"，会插进垂直流的残留横向空间，
+        # 把状态与激活按钮顶到卡片中段的怪位置，并把下方主操作按钮挤到可视区外。
+        _statbar = tk.Frame(_center, bg=PANEL)
+        _statbar.pack(fill="x", padx=14, pady=(8, 2))
+        self.status_dot = tk.Label(_statbar, text="●", bg=PANEL, fg=MUTED, font=F_BODY)
+        self.status_dot.pack(side="left", padx=(2, 6))
+        self.status_lbl = tk.Label(_statbar, textvariable=self.status_var, bg=PANEL, fg=INK,
                                    font=F_STAT)
-        self.status_lbl.pack(side="left", pady=(8, 4))
+        self.status_lbl.pack(side="left")
 
         # v1.3.58：激活/试用状态与入口（未激活=试用版，可随时点激活）
         self._licensed = trial.is_licensed()
-        self._trial_btn = ttk.Button(card, text="", style="Ghost.TButton",
+        self._trial_btn = ttk.Button(_statbar, text="", style="Ghost.TButton",
                                      command=self._open_activation)
-        self._trial_btn.pack(side="right", padx=(6, 14), pady=(6, 2))
+        self._trial_btn.pack(side="right")
         self._update_trial_badge()
 
-        btn_row = tk.Frame(card, bg=PANEL)
-        btn_row.pack(fill="x", padx=14, pady=(10, 14))
+        # v1.0.12：进度条放进状态行内部（与状态文字并排），而不是单占一行。
+        # 状态行高度由右侧激活按钮撑起（35px），进度条塞进去后垂直方向零增长，
+        # 处理时就不会把下方"上一步/下一步"推到 Canvas 视口外被切掉半截。
+        self.progress = ttk.Progressbar(_statbar, mode="indeterminate", length=300)
+        # 初始隐藏，运行时由 _set_running(True) 再 pack()；避免先 pack 再 forget 残留灰块
+
+        btn_row = tk.Frame(_center, bg=PANEL)
+        btn_row.pack(fill="x", padx=14, pady=(8, 10))
         self._prev_btn = ttk.Button(btn_row, text="上一步", style="TButton",
                                     command=self._go_prev)
         self._prev_btn.pack(side="left")
@@ -839,6 +855,9 @@ class App:
 
     # ----------------------------------------------------- 步骤时间线（向导）
     def _build_timeline(self, parent):
+        # v1.0.12：流程区保持紧凑、按内容高度排列。
+        # 曾尝试让流程区 expand 吸收剩余空间，但窗口不够高时会把下方"交付方式/主操作按钮"
+        # 整体推出 Canvas 视口，小屏下必须滚动才能点到按钮，故改回紧凑布局。
         tl = tk.Frame(parent, bg=PANEL)
         tl.pack(fill="x", padx=14, pady=(4, 2))
         self._step_circle = []
@@ -846,8 +865,10 @@ class App:
         self._step_line = []
         n = len(self.step_defs)
         for i, (mode, label) in enumerate(self.step_defs):
+            # v1.0.12：行距/连接线略收紧，让下方主操作按钮整体上移，
+            # 小窗口下不至于被 Canvas 视口切掉半个按钮（视觉上几乎无差别）
             row = tk.Frame(tl, bg=PANEL)
-            row.pack(fill="x", pady=2)
+            row.pack(fill="x", pady=1)
             col = tk.Frame(row, bg=PANEL)
             col.pack(side="left", padx=(0, 10))
             circ = tk.Label(col, text=str(i + 1), bg="#ffffff", fg="#8b8378",
@@ -856,7 +877,7 @@ class App:
             circ.pack()
             line = None
             if i < n - 1:
-                line = tk.Frame(col, width=2, height=22, bg="#e3dccb")
+                line = tk.Frame(col, width=2, height=16, bg="#e3dccb")
                 line.pack()
             self._step_circle.append(circ)
             self._step_line.append(line)
@@ -1277,7 +1298,9 @@ class App:
     def _set_running(self, running):
         def _apply():
             if running:
-                self.progress.pack(fill="x", padx=14, pady=(4, 2))
+                # v1.0.12：进度条并排进状态行（不另起一行），避免把下方主操作按钮推出视口。
+                # 激活按钮已先 pack(side="right")，进度条后 pack 只会占据左侧剩余空间，不挤压它。
+                self.progress.pack(side="left", fill="x", expand=True, padx=(8, 10))
                 self.progress.start(12)
                 self._next_btn.config(state="disabled")
             else:
