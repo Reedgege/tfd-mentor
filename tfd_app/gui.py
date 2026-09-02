@@ -104,7 +104,7 @@ _FONT_BASE = {
     "F_DIALOG_TITLE": ("KaiTi", 14, "bold"),    # 弹窗标题（楷体）
     "F_ICON":       ("KaiTi", 12, "bold"),      # 印章图标（论 / 模，楷体朱砂）
 }
-APP_VERSION = "1.0.13"  # 与 VERSION 文件保持同步（状态栏显示用）
+APP_VERSION = "1.0.14"  # 与 VERSION 文件保持同步（状态栏显示用）
 _FONTS = {}      # name -> (Font, base_size)
 _CUR_SCALE = 1.0 # 当前窗口缩放比例（宽度 / 基准宽度，钳制 0.8~1.0：只缩小不放大）
 BASE_W = 900     # 设计基准宽度（px），与主窗口默认 900x640 对应
@@ -772,11 +772,11 @@ class App:
 
     # --------------------------------------------------------- right panel
     def _build_right(self, parent):
-        # v1.0.12：右栏卡片按内容高度自然收住（fill="x"，不再 expand 拉伸到与左栏等高）。
-        # 左栏内容多、右栏内容少，强行等高会让右栏底部空出一大片，观感"右边又大又空"；
-        # 改为两卡顶对齐、各自按内容收边，疏密随内容，按钮位置在所有窗口尺寸下都可预期。
+        # v1.0.14：右栏卡片与左栏严格等高（fill="both", expand=True）。
+        # 用户在验收 v1.0.12 时明确要求"左右处理步骤框一样大"——即便右栏内容少会留白，
+        # 也不接受左右高度不一的观感。空白区域由文艺留白美学收住，底部"贰·处理"小字锚定。
         card = tk.Frame(parent, bg=PANEL, highlightthickness=1, highlightbackground=LINE)
-        card.pack(fill="x", anchor="n")
+        card.pack(fill="both", expand=True)
 
         # v1.0.12：右栏内容统一走这一个容器，贴顶铺满卡片。
         _center = tk.Frame(card, bg=PANEL)
@@ -832,12 +832,6 @@ class App:
         self._trial_btn.pack(side="right")
         self._update_trial_badge()
 
-        # v1.0.12：进度条放进状态行内部（与状态文字并排），而不是单占一行。
-        # 状态行高度由右侧激活按钮撑起（35px），进度条塞进去后垂直方向零增长，
-        # 处理时就不会把下方"上一步/下一步"推到 Canvas 视口外被切掉半截。
-        self.progress = ttk.Progressbar(_statbar, mode="indeterminate", length=300)
-        # 初始隐藏，运行时由 _set_running(True) 再 pack()；避免先 pack 再 forget 残留灰块
-
         btn_row = tk.Frame(_center, bg=PANEL)
         btn_row.pack(fill="x", padx=14, pady=(8, 10))
         self._prev_btn = ttk.Button(btn_row, text="上一步", style="TButton",
@@ -846,6 +840,11 @@ class App:
         self._next_btn = ttk.Button(btn_row, text="下一步", style="Primary.TButton",
                                     command=self._run_step)
         self._next_btn.pack(side="right")
+
+        # v1.0.14：进度条移到"上一步/下一步"按钮下方（独立于状态行），运行时不挤占按钮、不跳动。
+        # 容器默认不 pack（隐藏），运行时由 _set_running(True) 再显示；结束后收回，不留灰块。
+        self._progress_frame = tk.Frame(_center, bg=PANEL)
+        self.progress = ttk.Progressbar(self._progress_frame, mode="indeterminate", length=300)
 
         # 卡片底部章节小字（文艺学术点缀）
         tk.Label(card, text="贰 · 处理", bg=PANEL, fg="#b8b0a0",
@@ -1207,9 +1206,12 @@ class App:
             messagebox.showerror("缺少输入", "请先选择“待处理论文”（可多选批量导入）。")
             return
 
-        # 第③步 + 批量（≥2 篇）：先让客户选输出文件夹，再线程批量处理（避免逐个弹保存框）
-        if mode == "fix" and len(self.thesis_paths) > 1:
-            out_dir = filedialog.askdirectory(title="选择批量输出文件夹")
+        # 批量（≥2 篇）：检查 / 修正都走批量。先让客户选输出文件夹，再线程批量处理（避免逐个弹保存框）。
+        # v1.0.14：修正此前"仅 fix 模式批量、check 模式选多篇只处理首篇"导致只输出一篇报告的 bug。
+        if len(self.thesis_paths) > 1:
+            out_dir = filedialog.askdirectory(
+                title="选择批量输出文件夹（%s报告将保存在此）"
+                       % ("检查" if mode == "check" else "处理结果"))
             if not out_dir:
                 return
             self._errored = False
@@ -1298,16 +1300,18 @@ class App:
     def _set_running(self, running):
         def _apply():
             if running:
-                # v1.0.12：进度条并排进状态行（不另起一行），避免把下方主操作按钮推出视口。
-                # 激活按钮已先 pack(side="right")，进度条后 pack 只会占据左侧剩余空间，不挤压它。
-                self.progress.pack(side="left", fill="x", expand=True, padx=(8, 10))
+                # v1.0.14：进度条显示到"上一步/下一步"按钮下方的独立容器。
+                self._progress_frame.pack(fill="x", padx=14, pady=(2, 6))
+                self.progress.pack(fill="x", padx=2, pady=2)
                 self.progress.start(12)
                 self._next_btn.config(state="disabled")
             else:
                 self.progress.stop()
                 self.progress.pack_forget()
-                # 完成态允许“再处理一篇”，否则恢复可用
-                self._next_btn.config(state="normal")
+                self._progress_frame.pack_forget()
+                # v1.0.14：结束态用 _refresh_wizard 重新派生按钮三态——
+                # 修复此前无条件 state="normal" 把"完成"态（应置灰）错误恢复成可点的 bug。
+                self._refresh_wizard()
         self.root.after(0, _apply)
 
     # --------------------------------------------------- profile 提取与确认
@@ -1722,52 +1726,66 @@ class App:
                 if note:
                     self._debug(note)
                 base = os.path.splitext(os.path.basename(src))[0]
+                cr = None
                 try:
-                    for m in modes:
-                        annotate = (m == "annotate")
-                        suffix = "_批注副本" if annotate else "_已修正"
-                        dst = os.path.join(out_dir, base + suffix + ".docx")
-                        xlsx = os.path.join(out_dir, base + suffix + "_修改明细.xlsx")
-                        chk = os.path.join(out_dir, base + suffix + "_检查报告.docx")
-                        if annotate:
-                            engine.run_annotate(docx_path, dst, profile_path=profile,
-                                                author=author, xlsx_path=xlsx)
-                            out_note = "批注副本：%s" % os.path.basename(dst)
-                        else:
-                            rep = os.path.join(out_dir, base + suffix + "_修改报告.docx")
-                            engine.run_fix_headings(docx_path, dst, profile_path=profile,
-                                                    report_docx=rep, add_comments=True,
+                    if mode == "check":
+                        # 检查模式批量：逐篇生成格式检查报告（.docx），不改动原文件
+                        chk = os.path.join(out_dir, base + "_格式检查报告.docx")
+                        cr = engine.run_check(docx_path, profile_path=profile)
+                        engine.md_to_docx(cr, chk)
+                        out_note = "检查报告：%s" % os.path.basename(chk)
+                        rows.append([str(i), os.path.basename(src), "格式检查", out_note,
+                                     "检查报告已生成"])
+                    else:
+                        for m in modes:
+                            annotate = (m == "annotate")
+                            suffix = "_批注副本" if annotate else "_已修正"
+                            dst = os.path.join(out_dir, base + suffix + ".docx")
+                            xlsx = os.path.join(out_dir, base + suffix + "_修改明细.xlsx")
+                            chk = os.path.join(out_dir, base + suffix + "_检查报告.docx")
+                            if annotate:
+                                engine.run_annotate(docx_path, dst, profile_path=profile,
                                                     author=author, xlsx_path=xlsx)
-                            try:
-                                cr = engine.run_check(dst, profile_path=profile)
-                                engine.md_to_docx(cr, chk)
-                            except Exception as e:
-                                self._debug("[批量检查报告失败] " + str(e))
-                                chk = None
-                            out_note = "修正稿：%s" % os.path.basename(dst)
-                        rows.append([str(i), os.path.basename(src), mode_label, out_note,
-                                     "明细见 %s" % os.path.basename(xlsx)])
+                                out_note = "批注副本：%s" % os.path.basename(dst)
+                            else:
+                                rep = os.path.join(out_dir, base + suffix + "_修改报告.docx")
+                                engine.run_fix_headings(docx_path, dst, profile_path=profile,
+                                                        report_docx=rep, add_comments=True,
+                                                        author=author, xlsx_path=xlsx)
+                                try:
+                                    cr = engine.run_check(dst, profile_path=profile)
+                                    engine.md_to_docx(cr, chk)
+                                except Exception as e:
+                                    self._debug("[批量检查报告失败] " + str(e))
+                                    chk = None
+                                out_note = "修正稿：%s" % os.path.basename(dst)
+                            rows.append([str(i), os.path.basename(src), mode_label, out_note,
+                                         "明细见 %s" % os.path.basename(xlsx)])
                 except Exception as e:
                     self._debug("[批量处理失败] %s → %s" % (src, e))
                     rows.append([str(i), os.path.basename(src), mode_label, "（处理失败）", "错误：%s" % e])
-                # 全组共性问题：原始稿体检 → 归类 → 跨篇聚合（导师组会汇报用）
+                # 全组共性问题：稿体检 → 归类 → 跨篇聚合（导师组会汇报用）。
+                # 检查模式已算过 cr，直接复用；其余模式对原始稿体检。
                 try:
-                    _grp_md = engine.run_check(docx_path, profile_path=profile)
+                    _grp_md = cr if mode == "check" else engine.run_check(docx_path, profile_path=profile)
                     _grps = [classify_issue(m) for m in extract_issues_from_markdown(_grp_md)]
                     if _grps:
                         group_cats.append((os.path.basename(src), _grps))
                 except Exception as e:
                     self._debug("[全组共性问题采集失败，已跳过] " + str(e))
-            # 汇总 Excel
-            summary = ["批量处理模式：%s" % mode_label,
+            # 汇总 Excel（检查 / 修正 共用列表，仅标题与文件名按模式区分）
+            _is_check = (mode == "check")
+            summary = ["批量%s模式：%s" % ("检查" if _is_check else "处理", mode_label),
                        "共 %d 篇，署名：%s" % (total, author or "论文格式医生·导师版"),
-                       "每篇的逐条修改/批注明细见同名 _修改明细.xlsx"]
+                       ("每篇的检查报告已生成于本文件夹" if _is_check
+                        else "每篇的逐条修改/批注明细见同名 _修改明细.xlsx")]
             columns = [("序号", 600), ("原文件名", 2600), ("交付方式", 1400),
                        ("输出文件", 2400), ("说明", 2600)]
             try:
                 write_change_report_xlsx(
-                    os.path.join(out_dir, "汇总_修改明细.xlsx"),
-                    "批量处理汇总（%s）" % (author or "论文格式医生·导师版"), summary, columns, rows)
+                    os.path.join(out_dir, "汇总_检查明细.xlsx" if _is_check else "汇总_修改明细.xlsx"),
+                    ("批量检查汇总（%s）" if _is_check else "批量处理汇总（%s）")
+                    % (author or "论文格式医生·导师版"), summary, columns, rows)
             except Exception as e:
                 self._debug("[汇总 Excel 生成失败] " + str(e))
             # 全组共性问题总表（便于导师组会一句话汇报）
@@ -1789,11 +1807,30 @@ class App:
             self.root.after(0, lambda: self._set_running(False))
 
     def _on_batch_done(self, idx, mode, out_dir, n):
-        self._fix_phase = "saved"
-        self._set_status("批量处理完成，已保存至文件夹", OKC)
-        self._set_bar("done")
-        self._refresh_wizard()
-        self._show_batch_done(out_dir, n)
+        if mode == "check":
+            # 检查模式批量完成：检查步骤（idx=1）已结束，推进到下一步（修正/交付方式）。
+            self.step_index = idx + 1
+            self._set_status("批量检查完成，已保存 %d 篇检查报告" % n, OKC)
+            self._set_bar("done")
+            self._refresh_wizard()
+            self._show_batch_check_done(out_dir, n)
+        else:
+            self._fix_phase = "saved"
+            self._set_status("批量处理完成，已保存至文件夹", OKC)
+            self._set_bar("done")
+            self._refresh_wizard()
+            self._show_batch_done(out_dir, n)
+
+    def _show_batch_check_done(self, out_dir, n):
+        msg = ("已批量检查 %d 篇论文，每篇的格式检查报告（_格式检查报告.docx）已保存在：\n%s\n\n"
+               % (n, out_dir)
+               + "另含一份「汇总_检查明细.xlsx」（逐篇结果）与「汇总_全组共性问题.xlsx」"
+               "（共性问题汇总，便于导师组会一句话汇报）。\n\n"
+               + "如需按学校要求进一步修正，请点「下一步」进入交付方式选择。")
+        k = self._modal("批量检查完成", msg,
+                        [("open", "打开输出文件夹"), ("ok", "完成")])
+        if k == "open":
+            self._open_folder(out_dir)
 
     def _show_batch_done(self, out_dir, n):
         msg = ("已批量处理 %d 篇论文，结果保存在：\n%s\n\n" % (n, out_dir)
