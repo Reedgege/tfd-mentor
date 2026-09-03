@@ -104,7 +104,7 @@ _FONT_BASE = {
     "F_DIALOG_TITLE": ("KaiTi", 14, "bold"),    # 弹窗标题（楷体）
     "F_ICON":       ("KaiTi", 12, "bold"),      # 印章图标（论 / 模，楷体朱砂）
 }
-APP_VERSION = "1.0.16"  # 与 VERSION 文件保持同步（状态栏显示用）
+APP_VERSION = "1.0.17"  # 与 VERSION 文件保持同步（状态栏显示用）
 _FONTS = {}      # name -> (Font, base_size)
 _CUR_SCALE = 1.0 # 当前窗口缩放比例（宽度 / 基准宽度，钳制 0.8~1.0：只缩小不放大）
 BASE_W = 900     # 设计基准宽度（px），与主窗口默认 900x640 对应
@@ -395,7 +395,9 @@ def _profile_summary(profile):
 
 class App:
     def __init__(self, root):
+        global _APP_REF
         self.root = root
+        _APP_REF = self
         self.root.title("论文格式医生 · 导师版")
         # v1.0.11：主区已可滚动，窗口不再需要靠"撑得巨大"来露出页脚。
         # 默认尺寸按屏幕自适应（不超过屏幕 86%×88%），小屏也能容纳；最小尺寸放宽，
@@ -2606,6 +2608,9 @@ def main():
             return
     root.deiconify()
     App(root)
+    # 启动后台心跳：联网时若授权被撤销（退款），自动锁死软件
+    if license.check_local_valid() and not license.is_revoked():
+        license.start_heartbeat(product=license.DEFAULT_PRODUCT, on_revoked=_on_license_revoked)
     root.mainloop()
 
 
