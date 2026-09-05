@@ -104,7 +104,7 @@ _FONT_BASE = {
     "F_DIALOG_TITLE": ("KaiTi", 14, "bold"),    # 弹窗标题（楷体）
     "F_ICON":       ("KaiTi", 12, "bold"),      # 印章图标（论 / 模，楷体朱砂）
 }
-APP_VERSION = "1.0.20"  # 与 VERSION 文件保持同步（状态栏显示用）
+APP_VERSION = "1.0.21"  # 与 VERSION 文件保持同步（状态栏显示用）
 _FONTS = {}      # name -> (Font, base_size)
 _CUR_SCALE = 1.0 # 当前窗口缩放比例（宽度 / 基准宽度，钳制 0.8~1.0：只缩小不放大）
 BASE_W = 900     # 设计基准宽度（px），与主窗口默认 900x640 对应
@@ -1686,6 +1686,10 @@ class App:
             self._show_check_done(dst)
 
     def _do_fix(self, src, docx_path, dst):
+        # 授权被后台撤销（退款锁死）：直接拦截，禁止继续修正
+        if license.is_revoked():
+            self.root.after(0, self._handle_revoked)
+            return False
         # 第③步修正：按当前 _fix_mode 产出（both=批注副本+已修正版各一套，不重跑论文）。
         # 产出先落临时目录，待主线程 _export_fix 让客户选保存位置；结果存入 self._fix_outs。
         # 注意：试用门禁（_trial_ok）已由调用方在进此方法前统一校验一次，避免"两种都要"重复扣次数。
@@ -2169,6 +2173,30 @@ class App:
             self._update_trial_badge()
             self._set_status("已进入试用模式", MUTED)
 
+    def _handle_revoked(self):
+        """授权被后台撤销（退款锁死）：锁定软件，禁止继续修正。"""
+        self._licensed = False
+        self._update_trial_badge()
+        self._set_status("授权已失效（可能已退款），软件已锁定", ERRC)
+        self._modal(
+            "授权已失效",
+            "您的授权已被后台撤销（可能因退款）。\n\n"
+            "软件已锁定，无法继续修正论文。\n如需继续使用，请联系客服：hi@reedskill.com。",
+            [("ok", "知道了")])
+
+
+# ---------------------------------------------------------------------------
+_APP_REF = None  # App 实例引用，在 App.__init__ 中赋值
+
+
+def _on_license_revoked():
+    """心跳线程发现 revoked：通过 after(0) 切回主线程处理，避免后台线程碰 Tk。"""
+    if _APP_REF is not None:
+        try:
+            _APP_REF.root.after(0, _APP_REF._handle_revoked)
+        except Exception:
+            pass
+
 
 def show_activation(root, show_trial=True):
     """激活窗口：在线激活（主） + 离线备用码（兜底）。
@@ -2253,6 +2281,9 @@ def show_activation(root, show_trial=True):
             if ok:
                 license.save_local_license(card, mc)
                 license._log("gui: 授权已写入本机")
+                # 启动后台心跳：联网时若授权被撤销（退款），自动锁死
+                license.start_heartbeat(
+                    product=license.DEFAULT_PRODUCT, on_revoked=_on_license_revoked)
                 result["v"] = "ok"
                 top.destroy()
             else:
@@ -2600,8 +2631,8 @@ def main():
     root = tk.Tk()
     _init_fonts(root)
     root.withdraw()
-    if not license.check_local_valid():
-        # v1.3.58：未激活时弹激活窗，但提供"先试用"入口（不进主界面则退出）
+    if (not license.check_local_valid()) or license.is_revoked():
+        # 未激活（或被后台撤销）时弹激活窗，但提供"先试用"入口（不进主界面则退出）
         r = show_activation(root)
         if r not in ("ok", "trial"):
             root.destroy()
