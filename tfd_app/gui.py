@@ -106,7 +106,7 @@ _FONT_BASE = {
     "F_DIALOG_TITLE": ("KaiTi", 14, "bold"),    # 弹窗标题（楷体）
     "F_ICON":       ("KaiTi", 12, "bold"),      # 印章图标（论 / 模，楷体朱砂）
 }
-APP_VERSION = "1.0.26"
+APP_VERSION = "1.0.27"
 
 def _btn_display_width(text, pad=2):
     """按钮文案的「显示宽度」：全角字符按 2、半角按 1 累加，再加左右余量。
