@@ -12,8 +12,8 @@ Unicode true
 
 !define APPNAME "论文格式医生·导师版"
 !define APPDIR  "ThesisFormatDoctorMentor"
-!define EXE     "tfd-mentor.exe"
-!define DIST    "dist\tfd-mentor"
+!define EXE     "1.论文格式医生·导师版.exe"
+!define DIST    "dist\论文格式医生·导师版（免安装版）"
 
 Name "${APPNAME}"
 OutFile "tfd-mentor-setup.exe"
