@@ -106,7 +106,7 @@ _FONT_BASE = {
     "F_DIALOG_TITLE": ("KaiTi", 14, "bold"),    # 弹窗标题（楷体）
     "F_ICON":       ("KaiTi", 12, "bold"),      # 印章图标（论 / 模，楷体朱砂）
 }
-APP_VERSION = "1.0.32"
+APP_VERSION = "1.0.33"
 
 # v1.0.31：绿色 zip 版由软件自建桌面快捷方式（win32com 已内置，客户零依赖、零黑框）。
 APP_SHORTCUT_NAME = "论文格式医生·导师版"   # 桌面快捷方式显示名
@@ -459,9 +459,15 @@ class App:
             pass
         try:
             if os.path.isfile(ICON):
-                self.root.iconphoto(True, tk.PhotoImage(file=ICON))
+                # ⚠️ 必须把 PhotoImage 存成属性保留引用：直接写
+                # `root.iconphoto(True, tk.PhotoImage(file=ICON))` 时，这个临时对象
+                # 在语句结束后立刻被 CPython 回收，它的 __del__ 会连带把 Tk 里的图片
+                # 删掉 —— 表现就是「换了图标却还是 Tk 默认羽毛图标」。2026-09-11 实测：
+                # 不保留引用时 GC 后 Tk 的 image names 里查不到我们的图标。
+                self._window_icon = tk.PhotoImage(file=ICON)
+                self.root.iconphoto(True, self._window_icon)
         except Exception:
-            pass
+            self._window_icon = None
 
         # 随窗口缩放自适应：监听尺寸变化，按宽度比例整体缩放字体
         self._last_scale = None
