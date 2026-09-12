@@ -11,8 +11,9 @@
     → 心跳默认 3 天一次，仅"联网 + 服务端标记 revoked"才锁，离线/超时一律不锁
 
   兜底方案（离线）—— 卖家离线发码
-    万一中台不可用，客户联系卖家，卖家用 offlinecode 工具按机器码生成离线码，
-    客户粘贴即可激活。离线码用对称签名，安全等级适中，足以防小白共享。
+    万一中台不可用，客户联系卖家，卖家用离线发码工具按机器码生成离线码，
+    客户粘贴即可激活。离线码用 RSA 非对称签名（私钥只在卖家本机），公开仓库
+    也无法伪造，安全等级高。
 
 机器码：硬件级（磁盘序列号 + 主板 UUID），重装系统不变，换电脑不同。
 
@@ -78,13 +79,14 @@ def _log(msg):
 
 
 # ---------------------------------------------------------------------------
-# 离线备用码密钥（与 offlinecode.py 共用）。固定签名盐，用于离线激活兜底。
-# 导师版独立密钥，与学生版互不通用。
-# 注：v1.0.22 起弃用 base64+XOR 混淆存储——该"解密循环"形状会被杀软 ML 引擎
-# 误判为恶意载荷解密器（Trojan:Win32/Sabsik.TE.A!ml 误报元凶）。盐值本身非机密
-# （客户端内必然可见），改为明文常量以消除误报特征。防逆向靠 PyArmor 加壳策略。
+# 离线备用码（RSA 非对称签名，见 tfd_app/crypto.py）
 # ---------------------------------------------------------------------------
-_OFFLINE_KEY = b"tfd|mentor|offline|2026|sign|v2"
+# 用 RSA 替代旧对称 HMAC：私钥只在卖家本机（仓库根 private_key.pem，gitignore 忽略，
+# 绝不进安装包），公钥嵌入 crypto.py 编译进客户端。公开仓库 / 反编译客户端都拿不到
+# 私钥，因此无法伪造离线码。导师版密钥与学生版/海外版互不相同，离线码不跨版通用。
+# 客户把本机机器码发给卖家，卖家用 tools/reedmentor_gui.py（持本机私钥）生成离线码，
+# 客户在激活页粘贴即可。详见 tfd_app/crypto.py 顶部说明。
+from .crypto import verify_offline_code, PUBLIC_KEY_PEM
 
 
 _MC_CACHE = None  # v1.3.84：进程内缓存——机器码运行期不变，避免每次调用重复跑子进程
@@ -336,27 +338,10 @@ def save_local_license(card, machine_code, permanent=True, lic_type=None,
 
 
 # ---------------------------------------------------------------------------
-# 兜底方案：离线备用码
+# 兜底方案：离线备用码（RSA 非对称；verify_offline_code 已从上面的 crypto 导入）
 # ---------------------------------------------------------------------------
-def _offline_sign(payload):
-    return hmac.new(_OFFLINE_KEY, payload.encode("utf-8"), hashlib.sha256).hexdigest()[:24]
-
-
-def generate_offline_code(machine_code):
-    """卖家发码工具用：machine_code + 时间戳 + 签名 → 离线码。"""
-    ts = int(time.time())
-    payload = "%s|%d" % (machine_code, ts)
-    return payload + "|" + _offline_sign(payload)
-
-
-def verify_offline_code(code, machine_code):
-    """校验离线备用码：签名正确 且 绑定本机机器码。"""
-    if not code or "|" not in code:
-        return False
-    payload, _, sig = code.rpartition("|")
-    if not payload.startswith(machine_code + "|"):
-        return False
-    return hmac.compare_digest(_offline_sign(payload), sig)
+# 签名由卖家发码工具（tools/reedmentor_gui.py）持本机私钥完成；本模块只负责验签。
+# 机器码绑定、畸形输入防御等都在 tfd_app/crypto.verify_offline_code 内实现。
 
 
 def save_offline_license(code, machine_code):

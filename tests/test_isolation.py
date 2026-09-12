@@ -4,7 +4,7 @@
 ================================
 证明四个隔离层同时生效，避免两版授权互相通用：
   ① 在线卡密应用名（KAMI_APP=daoshiban）
-  ② 离线备用码密钥（_OFFLINE_KEY v2，mentor 专用）
+  ② 离线备用码密钥（RSA 非对称；导师版独立密钥对，与学生版/海外版互不通用）
   ③ 本地授权目录（~/.tfd_mentor_license）+ product 字段校验
   ④ 试用计数盐（_TRIAL_SALT，mentor 专用）
 
@@ -13,9 +13,8 @@
 import os
 import sys
 import json
-import hmac
-import hashlib
 import tempfile
+import rsa
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(HERE)
@@ -23,26 +22,28 @@ sys.path.insert(0, PROJECT_ROOT)
 
 import tfd_app.license as lic
 import tfd_app.trial as trial
+import tfd_app.crypto as crypto_mod
 
 
 def main():
     mc = lic.get_machine_code()
     print("本机机器码:", mc)
 
-    # 1) 导师版离线码正常往返
-    code = lic.generate_offline_code(mc)
+    # 1) 导师版离线码正常往返（用一份临时 RSA 密钥对模拟卖家私钥/客户端公钥）
+    mentor_pub, mentor_priv = rsa.newkeys(512)
+    crypto_mod.set_verify_public_key(mentor_pub)
+    code = crypto_mod.sign_offline(mentor_priv, mc)
     assert lic.verify_offline_code(code, mc) is True, "导师版离线码本机校验应成功"
     assert lic.verify_offline_code(code, "WRONGMACHINE") is False, "机器码不符应失败"
     print("[PASS] 导师版离线码往返正常")
 
-    # 2) 学生版离线码（旧密钥 v1）在导师版中应被拒
-    OLD_KEY = _obf("OykrMyQuIiYzICkpIyYhKjN9f315MzwmKCEzOX4=").encode("utf-8")
-    def student_sign(payload):
-        return hmac.new(OLD_KEY, payload.encode("utf-8"), hashlib.sha256).hexdigest()[:24]
-    ts = 1234567890
-    student_code = "%s|%d|%s" % (mc, ts, student_sign("%s|%d" % (mc, ts)))
+    # 2) 学生版离线码（独立 RSA 密钥对）在导师版中应被拒 —— 密钥隔离生效
+    student_pub, student_priv = rsa.newkeys(512)
+    student_code = crypto_mod.sign_offline(student_priv, mc)
     assert lic.verify_offline_code(student_code, mc) is False, "学生版离线码不应通过导师版校验"
     print("[PASS] 学生版离线码被导师版拒绝（密钥隔离生效）")
+
+    crypto_mod.set_verify_public_key(None)
 
     # 3) product 字段隔离：非 mentor 授权文件应被拒，mentor 授权应放行
     tmp = tempfile.mkdtemp()

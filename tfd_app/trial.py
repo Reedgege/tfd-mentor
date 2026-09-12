@@ -23,8 +23,7 @@ TRIAL_LIMIT = 2
 
 TRIAL_FILE = os.path.join(LICENSE_DIR, "trial.json")
 
-# 签名盐：与 license._OFFLINE_KEY 同风格，防普通用户直接改 json 里的 used
-# 导师版独立盐值，与学生版 trial.json 互不通用（即便目录误共享也不会混算）。
+# 试用计数封印盐：导师版独立盐值，与学生版 trial.json 互不通用（即便目录误共享也不会混算）。
 # 注：v1.0.22 起弃用 base64+XOR 混淆存储（杀软 ML 误报元凶，见 license.py 注释）。
 # 盐值非机密（客户端内可见），改明文常量。
 _TRIAL_SALT = b"tfd|mentor|trial|count|2026|v2"

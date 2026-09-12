@@ -85,7 +85,8 @@ def _nuitka_options():
     # 强制包含本地模块（顶层导入，须显式声明）
     for m in CORE_MODULES:
         opt += ["--include-module=" + m]
-    opt += ["--include-package=tfd_app"]
+    opt += ["--include-package=tfd_app",
+            "--include-package=rsa"]
     # 平台图标
     if WIN and os.path.isfile(ICON_ICO):
         opt += ["--windows-icon-from-ico=" + ICON_ICO]
