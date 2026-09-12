@@ -12,8 +12,8 @@
 
   兜底方案（离线）—— 卖家离线发码
     万一中台不可用，客户联系卖家，卖家用离线发码工具按机器码生成离线码，
-    客户粘贴即可激活。离线码用 RSA 非对称签名（私钥只在卖家本机），公开仓库
-    也无法伪造，安全等级高。
+    客户粘贴即可激活。离线码用 Ed25519 非对称签名（私钥只在卖家本机 _signing_keys/，
+    由统一发码器 reedcode_unified.py 持有），公开仓库也无法伪造，安全等级高。
 
 机器码：硬件级（磁盘序列号 + 主板 UUID），重装系统不变，换电脑不同。
 
@@ -27,7 +27,6 @@ import time
 import uuid
 import socket
 import hashlib
-import hmac
 import threading
 import urllib.parse
 import urllib.request
@@ -79,14 +78,14 @@ def _log(msg):
 
 
 # ---------------------------------------------------------------------------
-# 离线备用码（RSA 非对称签名，见 tfd_app/crypto.py）
+# 离线备用码（Ed25519 非对称验签，见 tfd_app/crypto.py）
 # ---------------------------------------------------------------------------
-# 用 RSA 替代旧对称 HMAC：私钥只在卖家本机（仓库根 private_key.pem，gitignore 忽略，
-# 绝不进安装包），公钥嵌入 crypto.py 编译进客户端。公开仓库 / 反编译客户端都拿不到
-# 私钥，因此无法伪造离线码。导师版密钥与学生版/海外版互不相同，离线码不跨版通用。
-# 客户把本机机器码发给卖家，卖家用 tools/reedmentor_gui.py（持本机私钥）生成离线码，
-# 客户在激活页粘贴即可。详见 tfd_app/crypto.py 顶部说明。
-from .crypto import verify_offline_code, PUBLIC_KEY_PEM
+# 用 Ed25519 替代旧对称 HMAC：私钥只在卖家本机（_signing_keys/mentor_ed25519_private.pem，
+# 绝不入库/绝不进安装包），公钥嵌入 crypto.py 编译进客户端（只能验签不能签名）。
+# 公开仓库 / 反编译客户端都拿不到私钥，因此无法伪造离线码。三版密钥互不相同，
+# 离线码不跨版通用。客户把本机机器码发给卖家，卖家用统一发码器 reedcode_unified.py
+# （持本机私钥）生成离线码，客户在激活页粘贴即可。详见 tfd_app/crypto.py 顶部说明。
+from .crypto import verify_offline_code
 
 
 _MC_CACHE = None  # v1.3.84：进程内缓存——机器码运行期不变，避免每次调用重复跑子进程
@@ -174,6 +173,45 @@ def _http_json(path, payload, timeout):
         return None, str(e)
     finally:
         socket.setdefaulttimeout(prev)
+
+
+# ---------------------------------------------------------------------------
+# 试用额度登记（中台，按机器绑定）—— 与海外版同一套 /api/trial 契约
+# ---------------------------------------------------------------------------
+TRIAL_PATH = "/api/trial"
+
+
+def _trial_sync(machine_code, claim=False):
+    """试用额度登记/查询（中台）。网络失败返回 None，由调用方走本地兜底。"""
+    resp, err = _http_json(TRIAL_PATH, {
+        "product": DEFAULT_PRODUCT, "machine_code": machine_code,
+        "claim": bool(claim)}, 3)
+    if err:
+        return None
+    return resp
+
+
+def server_trial_used(machine_code):
+    """中台是否记得该机器已用过试用（查不到/离线 → False，绝不阻断本地判定）。
+
+    必须显式要求 ok=True 才信 trial_used —— `_http_json` 对非 2xx 也会解析响应体，
+    若错误信封里恰好带 trial_used 字段，会被误判成「已用过」而误锁（Codex 2026-09-12）。
+    """
+    r = _trial_sync(machine_code, claim=False)
+    return bool(r and r.get("ok") and r.get("trial_used"))
+
+
+def claim_server_trial(machine_code) -> bool:
+    """首次试用后向中台登记（幂等）。离线/失败静默忽略，不影响本地计次。
+
+    返回是否**登记成功** —— 调用方据此决定要不要把「中台已知」写进本地缓存：
+    否则离线失败也会被当成已登记，把同一会话里的后续试用误拒（Codex 2026-09-12 N2）。
+    """
+    try:
+        r = _trial_sync(machine_code, claim=True)
+        return bool(r and r.get("ok"))
+    except Exception:
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -338,9 +376,10 @@ def save_local_license(card, machine_code, permanent=True, lic_type=None,
 
 
 # ---------------------------------------------------------------------------
-# 兜底方案：离线备用码（RSA 非对称；verify_offline_code 已从上面的 crypto 导入）
+# 兜底方案：离线备用码（Ed25519 非对称；verify_offline_code 已从上面的 crypto 导入）
 # ---------------------------------------------------------------------------
-# 签名由卖家发码工具（tools/reedmentor_gui.py）持本机私钥完成；本模块只负责验签。
+# 签名由卖家统一发码器（_signing_keys/reedcode_unified.py）持本机私钥完成；
+# 本模块只负责验签（纯标准库，零第三方加密依赖）。
 # 机器码绑定、畸形输入防御等都在 tfd_app/crypto.verify_offline_code 内实现。
 
 

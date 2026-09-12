@@ -85,8 +85,7 @@ def _nuitka_options():
     # 强制包含本地模块（顶层导入，须显式声明）
     for m in CORE_MODULES:
         opt += ["--include-module=" + m]
-    opt += ["--include-package=tfd_app",
-            "--include-package=rsa"]
+    opt += ["--include-package=tfd_app"]
     # 运行时资源（窗口图标 / 二维码 / 水印图）必须显式带进产物 —— gui 与 watermark
     # 都会在运行时按 <包目录>/assets/<name> 读取。**v1.1.0 及更早漏了这一步**，导致
     # 打包版「二维码不显示、水印图片丢失」，而每处都有 isfile 守卫 → 全程静默不报错。

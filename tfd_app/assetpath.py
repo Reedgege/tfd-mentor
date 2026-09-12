@@ -30,6 +30,7 @@ REQUIRED_ASSETS = (
     "miniapp_qrcode.png",  # 小程序二维码
     "watermark.png",       # 试用水印图（正文穿插）
     "watermark_bg.png",    # 试用水印背景图（页眉 VML）
+    "advisor_background.png",  # 导师版主界面背景图（Backdrop 铺底，缺则降级为纯色）
 )
 
 

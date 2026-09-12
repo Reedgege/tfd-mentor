@@ -43,9 +43,8 @@ jobs:
       - name: Install Nuitka
         run: python -m pip install --upgrade pip nuitka
 
-      # RSA 非对称离线激活（公钥已嵌入源码，私钥只在卖家本机，无需任何 CI secret）。
-      - name: Install rsa (offline-activation crypto)
-        run: python -m pip install "rsa>=4.9"
+      # 离线激活验签为**纯标准库 Ed25519**（tfd_app/ed25519_verify.py），无第三方加密
+      # 依赖，故无需安装 crypto 包。公钥已嵌入源码，私钥只在卖家本机（绝不进 CI）。
 
       - name: Install pywin32 (Windows only, in-process Word/WPS .doc conversion)
         if: matrix.os == 'windows'

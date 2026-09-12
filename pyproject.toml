@@ -1,14 +1,20 @@
 [project]
 name = "tfd-mentor"
-version = "1.1.1"
+version = "1.1.2"
 description = "论文格式医生 · 导师版 —— 导师检查学生论文格式、生成带批注副本的纯本地离线桌面程序"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "reedskill" }]
 keywords = ["docx", "论文格式", "格式检查", "GB/T 7714", "thesis", "mentor"]
-# 离线激活用 RSA 非对称签名（rsa 纯 Python，Nuitka 打包无额外原生依赖）。
-dependencies = ["rsa>=4.9"]
+# 离线激活验签为纯标准库 Ed25519（tfd_app/ed25519_verify.py），无第三方运行时依赖。
+dependencies = []
+
+# 仅测试/本地开发用的可选依赖：tests/test_isolation.py 需要一个能「签名」的库来造测试离线码
+# （签名只发生在卖家侧/测试侧；客户端永远只验签）。
+#   pip install -e ".[test]"   然后 python tests/test_isolation.py
+[project.optional-dependencies]
+test = ["cryptography>=41"]
 
 [project.urls]
 Homepage = "https://reedskill.com"

@@ -237,12 +237,15 @@ def run_all():
         lic.LICENSE_DIR = tmp
         lic.LICENSE_FILE = os.path.join(tmp, "license.json")
         trial.TRIAL_FILE = os.path.join(tmp, "trial.json")
+        # 隔离中台试用登记：单测不联网、不污染线上 trials 表（TRIAL_LIMIT=1）
+        lic.server_trial_used = lambda mc: False
+        lic.claim_server_trial = lambda mc: None
+        trial._SERVER_USED.update(val=False, ts=1e18)   # 缓存置为「未用过」，避免联网
         try:
             assert not trial.is_licensed(), "测试环境不应已激活"
-            ck("trial 初始剩余=2", trial.trials_left() == 2, "left=%d" % trial.trials_left())
+            ck("trial 初始剩余=1", trial.trials_left() == 1, "left=%d" % trial.trials_left())
             ck("trial 第1次扣减成功", trial.consume_trial() is True)
-            ck("trial 第2次扣减成功", trial.consume_trial() is True)
-            ck("trial 用完第3次被拒", trial.consume_trial() is False)
+            ck("trial 用完第2次被拒", trial.consume_trial() is False)
             # 篡改锁定
             d = json.load(open(trial.TRIAL_FILE, encoding="utf-8"))
             d["used"] = 0
