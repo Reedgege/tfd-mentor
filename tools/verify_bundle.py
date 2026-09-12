@@ -15,6 +15,15 @@ watermark.py 读取资源时都写了 ``if os.path.isfile(...)`` 守卫 —— �
 import os
 import sys
 
+# Windows runner 控制台默认 cp1252：直接 print 中文（全角冒号「：」等）会抛
+# UnicodeEncodeError，**让自检自己把构建搞红**（v1.1.1 Windows 首跑就栽在这）。
+# 与 build.py 同款兜底：强制 UTF-8，编不出的字符替换掉，绝不让日志编码左右构建结果。
+for _stream in ("stdout", "stderr"):
+    try:
+        getattr(sys, _stream).reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from tfd_app.assetpath import REQUIRED_ASSETS  # noqa: E402
