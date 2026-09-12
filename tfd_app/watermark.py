@@ -62,10 +62,18 @@ _IMG_EMU_H = int(_IMG_EMU_W * 75 / 260)
 # 页眉背景水印图显示尺寸（800x800 透明底 → 显示约 300pt 大图，页面背景居中）
 _BG_EMU = int(300 * 12700)         # 300pt 方形
 
-# 水印图片资源（与 gui 同包；打包后经 assets 数据目录携带）
+# 水印图片资源：路径统一走 assetpath（其 docstring 记录了「打包版读不到资源」的真事故）。
+# 兼容被当作顶层模块导入的场景，故 import 失败时退回旧的写死路径。
+try:
+    from . import assetpath
+except ImportError:                        # pragma: no cover - 顶层导入兜底
+    assetpath = None
+
 _HERE = os.path.dirname(os.path.abspath(__file__))
-_IMG_SRC = os.path.join(_HERE, "assets", _IMG_NAME)
-_BG_IMG_SRC = os.path.join(_HERE, "assets", _BG_IMG_NAME)
+_IMG_SRC = ((assetpath.find_asset(_IMG_NAME) if assetpath else None)
+            or os.path.join(_HERE, "assets", _IMG_NAME))
+_BG_IMG_SRC = ((assetpath.find_asset(_BG_IMG_NAME) if assetpath else None)
+               or os.path.join(_HERE, "assets", _BG_IMG_NAME))
 
 
 def _wm_run(text, sz="20", color="C00000", bold=True):

@@ -129,6 +129,13 @@ jobs:
           mkdir -p release
           cd dist && zip -r "../release/tfd-mentor-linux.zip" "tfd-mentor"
 
+      # 构建后自检：运行时资源（窗口图标 / 二维码 / 水印图）必须真的进了产物。
+      # v1.1.0 及更早的 build.py 漏了 tfd_app/assets，而读取方都有 isfile 守卫，
+      # 于是打包版「二维码不显示、水印图丢失」却**全程静默**。这一步把它变成构建红灯。
+      - name: Verify bundled runtime assets
+        shell: bash
+        run: python tools/verify_bundle.py dist
+
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:

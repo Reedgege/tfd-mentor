@@ -40,6 +40,7 @@ if CORE_DIR not in sys.path:
 
 from . import trial       # v1.3.56：试用计数（机器码绑定，2 次）——相对导入，PyInstaller 才收集
 from . import watermark   # v1.3.56：试用水印（页眉页脚+正文穿插）
+from . import assetpath   # v1.1.1：运行时资源多候选路径解析（打包后布局会变）
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 import tkinter.font as tkfont
@@ -59,9 +60,13 @@ except ImportError:
     from group_report import aggregate, extract_issues_from_markdown, classify_issue
 
 
-ICON = os.path.join(HERE, "assets", "icon.png")
-QRCODE = os.path.join(HERE, "assets", "qrcode.png")
-MINIAPP_QRCODE = os.path.join(HERE, "assets", "miniapp_qrcode.png")
+# 资源路径统一走 assetpath：源码运行与打包后的布局不一致，写死一条路径会在
+# 打包版静默读不到（v1.1.0 就是「二维码不显示、水印图丢失」的真事故）。
+# 找不到时退回旧路径，保持既有 `os.path.isfile(...)` 守卫语义（False → 不显示）。
+ICON = assetpath.find_asset("icon.png") or os.path.join(HERE, "assets", "icon.png")
+QRCODE = assetpath.find_asset("qrcode.png") or os.path.join(HERE, "assets", "qrcode.png")
+MINIAPP_QRCODE = (assetpath.find_asset("miniapp_qrcode.png")
+                  or os.path.join(HERE, "assets", "miniapp_qrcode.png"))
 MINIAPP_NAME = "芦苇论文格式"
 # 品牌 / 客服（文案统一来源，避免散落硬编码）
 WECHAT_NAME = "芦苇不熬夜"
@@ -106,7 +111,7 @@ _FONT_BASE = {
     "F_DIALOG_TITLE": ("KaiTi", 14, "bold"),    # 弹窗标题（楷体）
     "F_ICON":       ("KaiTi", 12, "bold"),      # 印章图标（论 / 模，楷体朱砂）
 }
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.1.1"
 
 # v1.0.31：绿色 zip 版由软件自建桌面快捷方式（win32com 已内置，客户零依赖、零黑框）。
 APP_SHORTCUT_NAME = "论文格式医生·导师版"   # 桌面快捷方式显示名

@@ -87,6 +87,18 @@ def _nuitka_options():
         opt += ["--include-module=" + m]
     opt += ["--include-package=tfd_app",
             "--include-package=rsa"]
+    # 运行时资源（窗口图标 / 二维码 / 水印图）必须显式带进产物 —— gui 与 watermark
+    # 都会在运行时按 <包目录>/assets/<name> 读取。**v1.1.0 及更早漏了这一步**，导致
+    # 打包版「二维码不显示、水印图片丢失」，而每处都有 isfile 守卫 → 全程静默不报错。
+    # 清单以 tfd_app/assetpath.py 的 REQUIRED_ASSETS 为唯一事实来源；缺文件直接构建
+    # 失败（fail-closed），宁可构建红，也不要发出一个"看着正常、功能缺件"的包。
+    sys.path.insert(0, HERE)
+    from tfd_app.assetpath import REQUIRED_ASSETS
+    for _name in REQUIRED_ASSETS:
+        _src = os.path.join(HERE, "tfd_app", "assets", _name)
+        if not os.path.isfile(_src):
+            raise SystemExit("构建中止：缺少运行时资源 %s（见 tfd_app/assetpath.py）" % _src)
+        opt += ["--include-data-files=" + _src + "=tfd_app/assets/" + _name]
     # 平台图标
     if WIN and os.path.isfile(ICON_ICO):
         opt += ["--windows-icon-from-ico=" + ICON_ICO]
