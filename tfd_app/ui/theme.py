@@ -116,6 +116,17 @@ def _derive(edition, base):
         # 危险按钮（danger-button.svg：浅朱砂底 + 朱砂描边 + 朱砂字）
         "danger_fill": "#FFF8F6", "danger_border": "#D8B0AA",
         "danger_text": "#A94A43", "danger_hover": "#FBEDEA",
+        # 浅色小徽章（视觉稿「可选」）
+        "soft_fill": "#F0F6FA" if is_student else "#F1F4F2",
+        "soft_border": "#D5E3EC" if is_student else "#DCD3C8",
+        "soft_text": "#50708A" if is_student else "#6B6259",
+        # 单选（radio-on.svg / radio-off.svg）
+        "radio_on": "#286D9F" if is_student else "#355F73",
+        "radio_off_border": "#AFC0CB" if is_student else "#BFB3A6",
+        # 页脚细线 / 文案色（footer.svg）
+        "footer_line": "#D8E2EA",
+        "footer_text": "#6F8493",
+        "footer_text_soft": "#8A979E",
         # 弹窗壳
         "modal_fill": "#FFFDF9", "modal_border": "#D8E2EA",
         "modal_title": "#193E5D", "modal_sub": "#6F8493",
