@@ -4,9 +4,9 @@
 ==============================================
 面向客户的简洁流程，不展示任何执行细节；一屏放得下，无需滚动：
 
-  一 · 选择文件        —— 批量导入论文（必选）+ 学校模板（可选）
-  二 · 按步骤操作      —— ① 提取学校模板要求 → ② 论文格式检查 → ③ 按学校要求一键修正
-  三 · 处理状态        —— 只显示友好状态与结果确认，无原始日志
+  壹 · 选择文件        —— 待处理论文（必选）+ 学校模板（可选）
+  贰 · 按步骤操作      —— ① 提取学校模板要求 → ② 论文格式检查 → ③ 按学校要求一键修正
+  叁 · 处理状态        —— 只显示友好状态与结果确认，无原始日志
 
 交互约定：
   - 「提取学校模板要求」完成后，弹出“学校模板要求”确认页（关键项可修改），
@@ -38,9 +38,8 @@ CORE_DIR = os.path.join(HERE, "core")
 if CORE_DIR not in sys.path:
     sys.path.insert(0, CORE_DIR)
 
-from . import trial       # v1.3.56：试用计数（机器码绑定，1 次）——相对导入，PyInstaller 才收集
+from . import trial       # v1.3.56：试用计数（机器码绑定，2 次）——相对导入，PyInstaller 才收集
 from . import watermark   # v1.3.56：试用水印（页眉页脚+正文穿插）
-from . import assetpath   # v1.1.1：运行时资源多候选路径解析（打包后布局会变）
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 import tkinter.font as tkfont
@@ -60,13 +59,9 @@ except ImportError:
     from group_report import aggregate, extract_issues_from_markdown, classify_issue
 
 
-# 资源路径统一走 assetpath：源码运行与打包后的布局不一致，写死一条路径会在
-# 打包版静默读不到（v1.1.0 就是「二维码不显示、水印图丢失」的真事故）。
-# 找不到时退回旧路径，保持既有 `os.path.isfile(...)` 守卫语义（False → 不显示）。
-ICON = assetpath.find_asset("icon.png") or os.path.join(HERE, "assets", "icon.png")
-QRCODE = assetpath.find_asset("qrcode.png") or os.path.join(HERE, "assets", "qrcode.png")
-MINIAPP_QRCODE = (assetpath.find_asset("miniapp_qrcode.png")
-                  or os.path.join(HERE, "assets", "miniapp_qrcode.png"))
+ICON = os.path.join(HERE, "assets", "icon.png")
+QRCODE = os.path.join(HERE, "assets", "qrcode.png")
+MINIAPP_QRCODE = os.path.join(HERE, "assets", "miniapp_qrcode.png")
 MINIAPP_NAME = "芦苇论文格式"
 # 品牌 / 客服（文案统一来源，避免散落硬编码）
 WECHAT_NAME = "芦苇不熬夜"
@@ -74,50 +69,44 @@ WECHAT_ID = "reedskill"
 ABOUT_MAIL = "hi@reedskill.com"
 HELP_HINT = "\n\n遇到问题？看帮助或关注公众号【%s】留言。" % WECHAT_NAME
 OFFICIAL_SITE = "https://reedskill.com"        # 官网（大本营）；给人看的省略 https，代码里打开用全址
-OFFICIAL_SITE_TEXT = "🌐 reedskill.com"   # 页脚 / 官网入口文案（COPY_TABLE 第 4 节）
+OFFICIAL_SITE_TEXT = "官网：reedskill.com"
 
 # ---------------------------------------------------------------------------
-# 配色：严格照施工包 03_SHARED/tokens/DESIGN_TOKENS.json 的 advisor 段
-# 唯一来源 = ui.theme 的 advisor 调色板；禁止在此写死第二套颜色 / 字体。
+# 配色：宣纸 / 墨 / 黛蓝 / 朱砂 —— 学术范 + 文艺感
 # ---------------------------------------------------------------------------
-from .ui import get_theme, backdrop, widgets, brand, SPACING, TYPE   # 共享 UI 零件（edition="advisor" 取色）
-from .ui.modal import ModalShell, ConfirmModal
-_ADV = get_theme("advisor")        # 导师版 = advisor 调色板
-PAPER   = _ADV.bg          # 宣纸底（advisor 暖米白）
-PANEL   = _ADV.surface     # 面板（亮卡面）
-INK     = _ADV.navy        # 主文字（暖褐黑）—— 标题 / 重点
-BODY    = "#444444"        # 正文（灰）—— 描述性文字
-MUTED   = _ADV.muted       # 次要文字 / 页脚（浅灰）
-LINE    = _ADV.border      # 细线
-ACCENT  = _ADV.primary     # 墨青（章节条 / 强调）
-CINNABAR= _ADV.seal        # 印章红（主按钮 / 身份章）
-CINNABAR_D = "#93433B"     # 印章红深（主操作 hover/active，官方 seal 的深一档）
-OKC     = _ADV.success_dot # 完成（墨绿点）
-ERRC    = _ADV.error_text  # 出错（朱红）
-RUN     = ACCENT           # 处理中（墨青）
+PAPER   = "#f6f2ea"   # 宣纸底（保留用户喜欢的底色）
+PANEL   = "#fdfbf6"   # 面板（微亮的纸）
+INK     = "#222222"   # 主文字（深）—— 标题 / 重点
+BODY    = "#444444"   # 正文（灰）—— 描述性文字
+MUTED   = "#666666"   # 次要文字 / 页脚（浅灰）
+LINE    = "#e0d9c8"   # 细线
+ACCENT  = "#46586f"   # 黛蓝（章节条 / 强调）
+CINNABAR= "#9e4233"   # 朱砂（主按钮）
+CINNABAR_D = "#8a382b"
+OKC     = "#5f7d5c"   # 完成（墨绿）
+ERRC    = "#a0402f"   # 出错（朱红）
+RUN     = ACCENT      # 处理中（黛蓝）
 
-# 字体：标题 / 章节 / 状态用楷体（KaiTi，文艺调性），正文 / 按钮 / 页脚用微软雅黑（清晰）。
-# 字号唯一来源 = ui.theme 的 TYPE 表（照 _ui_ref/TYPE_SCALE.md 逐字取值）—— 这里只做
-# 「语义名 → 字体族 + 加粗」的转发，严禁再写第二套字号字面量（新旧字号混排正是"突兀"的成因）。
-# 运行时由 _init_fonts() 变成 tkfont.Font 命名对象（name -> Font），任何 widget / ttk style
-# 引用 F_XXX 都取到权威值；字号不随窗口缩放（TYPE_SCALE.md 第 4 节：不许用缩放函数糊）。
+# 字体：标题 / 章节 / 状态用楷体（KaiTi，文艺调性），正文 / 按钮 / 页脚用微软雅黑（清晰）
+# 运行时由 _init_fonts() 变成 tkfont.Font 命名对象（name -> Font），随窗口大小整体缩放，
+# 任何 widget / ttk style 引用 F_XXX 都会自动级联更新，保证"窗口拉大内容跟着变大"。
 _FONT_BASE = {
-    "F_TITLE":      ("KaiTi", TYPE["page_title"], "bold"),      # 页面大标题（关于 / 帮助 / 激活窗）
-    "F_SUB":        ("Microsoft YaHei", TYPE["subtitle"]),      # 副标题
-    "F_HDR":        ("KaiTi", TYPE["section_title"], "bold"),   # 区块标题（楷体）
-    "F_BODY":       ("Microsoft YaHei", TYPE["body"]),          # 正文 / 步骤说明
-    "F_SMALL":      ("Microsoft YaHei", TYPE["caption"]),       # 次按钮 / 次要说明
-    "F_SMALL_B":    ("Microsoft YaHei", TYPE["body"], "bold"),  # 加粗正文（字段名 / 提示框标题）
-    "F_BTN":        ("Microsoft YaHei", TYPE["btn"], "bold"),   # 主按钮
-    "F_STAT":       ("KaiTi", TYPE["body"]),                    # 状态文字（楷体）
-    "F_SUBTITLE":   ("Microsoft YaHei", TYPE["card_title"]),    # 卡片标题 / 元信息
-    "F_CARD_HDR":   ("KaiTi", TYPE["section_title"], "bold"),   # 区块标题（文件选择 / 处理步骤）
-    "F_FOOT":       ("Microsoft YaHei", TYPE["footer"]),        # 状态栏 / 页脚 / 说明（最小层级）
-    "F_MONO":       ("Consolas", TYPE["mono"]),                 # 机器码 / 离线码（等宽）
-    "F_DIALOG_TITLE": ("KaiTi", TYPE["section_title"], "bold"), # 弹窗标题（楷体）
-    "F_ICON":       ("KaiTi", TYPE["seal"], "bold"),            # 印章图标（论 / 模，楷体朱砂）
+    "F_TITLE":      ("KaiTi", 20, "bold"),      # 主标题（楷体）
+    "F_SUB":        ("Microsoft YaHei", 12),    # 副标题
+    "F_HDR":        ("KaiTi", 13, "bold"),      # 章节标题（楷体）
+    "F_BODY":       ("Microsoft YaHei", 12),    # 正文 / 步骤说明
+    "F_SMALL":      ("Microsoft YaHei", 10),    # 底部提示 / 次要
+    "F_SMALL_B":    ("Microsoft YaHei", 10, "bold"),  # 提示框标题（加粗，随缩放联动）
+    "F_BTN":        ("Microsoft YaHei", 12, "bold"),  # 按钮
+    "F_STAT":       ("KaiTi", 12),              # 状态文字（楷体）
+    "F_SUBTITLE":   ("Microsoft YaHei", 11),    # 元信息
+    "F_CARD_HDR":   ("KaiTi", 13, "bold"),      # 卡片标题（楷体）
+    "F_FOOT":       ("Microsoft YaHei", 10),    # 状态栏 / 页脚 / 说明（次要，最小层级）
+    "F_MONO":       ("Consolas", 9),            # 机器码 / 离线码（等宽）
+    "F_DIALOG_TITLE": ("KaiTi", 14, "bold"),    # 弹窗标题（楷体）
+    "F_ICON":       ("KaiTi", 12, "bold"),      # 印章图标（论 / 模，楷体朱砂）
 }
-from .buildinfo import APP_VERSION   # 版本号唯一来源（与 VERSION 文件的一致性由 tests 钉住）
+APP_VERSION = "1.0.32"
 
 # v1.0.31：绿色 zip 版由软件自建桌面快捷方式（win32com 已内置，客户零依赖、零黑框）。
 APP_SHORTCUT_NAME = "论文格式医生·导师版"   # 桌面快捷方式显示名
@@ -131,11 +120,32 @@ def _is_frozen_exe():
     return base.endswith(".exe") and not (base.startswith("python")
                                           or base.startswith("pythonw"))
 
+def _btn_display_width(text, pad=2):
+    """按钮文案的「显示宽度」：全角字符按 2、半角按 1 累加，再加左右余量。
+
+    ttk.Button 的 width 单位是「英文字符宽」，而中/日/韩全角字符渲染宽度约为
+    英文的 2 倍。直接拿 len(text) 当宽度会让含中文的文案被截断（v1.3.98 的 bug：
+    "上一步" 3 字只分到 4 字符宽 → 只显示得出 2 个汉字）。
+    """
+    w = 0
+    for ch in text:
+        # 常用全角区间：CJK 统一表意文字、假名、谚文、全角 ASCII/标点、CJK 符号
+        o = ord(ch)
+        if (0x1100 <= o <= 0x115F or 0x2E80 <= o <= 0xA4CF
+                or 0xAC00 <= o <= 0xD7A3 or 0xF900 <= o <= 0xFAFF
+                or 0xFE30 <= o <= 0xFE6F or 0xFF00 <= o <= 0xFF60
+                or 0xFFE0 <= o <= 0xFFE6 or 0x20000 <= o <= 0x3FFFD):
+            w += 2
+        else:
+            w += 1
+    return max(6, w + pad)
   # 与 VERSION 文件保持同步（状态栏显示用）
-_FONTS = {}      # name -> tkfont.Font（字号一律取自 TYPE，不随窗口缩放）
+_FONTS = {}      # name -> (Font, base_size)
+_CUR_SCALE = 1.0 # 当前窗口缩放比例（宽度 / 基准宽度，钳制 0.8~1.0：只缩小不放大）
+BASE_W = 900     # 设计基准宽度（px），与主窗口默认 900x640 对应
 
 def _init_fonts(root):
-    """在 root 创建后调用：把 F_XXX 全局名替换为 Font 命名对象（字号 = TYPE 权威值）。"""
+    """在 root 创建后调用：把 F_XXX 全局名替换为可缩放的 Font 命名对象。"""
     import platform as _platform
     # 跨平台中文字体兜底：Windows 自带楷体/雅黑；mac/Linux 无则映射到系统 CJK 字体，
     # 避免 tkinter 静默回退到无中文的默认字体出现方块（tofu）。Windows 上字体存在，走原值。
@@ -154,8 +164,21 @@ def _init_fonts(root):
         if len(spec) > 2:
             kw["weight"] = spec[2]
         f = tkfont.Font(root=root, **kw)
-        _FONTS[name] = f
+        _FONTS[name] = (f, spec[1])
         globals()[name] = f
+
+def _apply_scale(factor):
+    """按宽度因子缩放全部字体字号（下限 9pt 保证可读；上限 1.0：窗口拉大不放大字体）。"""
+    global _CUR_SCALE
+    factor = max(0.8, min(1.0, factor))
+    _CUR_SCALE = factor
+    for f, base in _FONTS.values():
+        f.configure(size=max(9, int(round(base * factor))))
+
+def _geo(w, h):
+    """弹窗固定尺寸按当前缩放比例换算，避免字体变大后内容溢出。"""
+    s = _CUR_SCALE
+    return "%dx%d" % (max(420, int(w * s)), max(380, int(h * s)))
 
 # 页边距字段：编辑厘米值时同步写 twips（top/bottom/left/right），兼容两套读取方
 _MARGIN_TWIPS = {
@@ -405,59 +428,23 @@ def _profile_summary(profile):
     return lines
 
 
-class _CanvasText:
-    """把「宣纸页上的 canvas 文字项」包装成能 ``.config(text=/fg=)`` 的对象。
-
-    页脚 / 状态栏必须画成 canvas 文字项 —— widget 自带底色，会把宣纸纹理盖成一块米白。
-    而既有逻辑只会调 ``.config()``，这里做一层薄适配，业务逻辑一行都不用改。
-    """
-
-    def __init__(self, app, item):
-        self._app = app
-        self._cv = app._page
-        self._item = item
-
-    def config(self, text=None, fg=None, fill=None, **_kw):
-        if text is not None:
-            self._cv.itemconfig(self._item, text=text)
-        color = fg if fg is not None else fill
-        if color is not None:
-            self._cv.itemconfig(self._item, fill=color)
-        # 文字变了 → 状态栏是右对齐拼排的，跟着重排一次
-        self._app._layout_status()
-        return self
-
-    configure = config
-
-
 class App:
     def __init__(self, root):
         global _APP_REF
         self.root = root
         _APP_REF = self
         self.root.title("论文格式医生 · 导师版")
-        # 导师版 = advisor 调色板 + 宣纸背景（严格照施工包 advisor 段）
-        self.edition = "advisor"
-        self._theme = get_theme("advisor")
-        self._backdrop = backdrop.Backdrop(self.edition)
-        try:
-            self._backdrop.attach(self.root)
-        except Exception:
-            pass
         # v1.0.11：主区已可滚动，窗口不再需要靠"撑得巨大"来露出页脚。
         # 默认尺寸按屏幕自适应（不超过屏幕 86%×88%），小屏也能容纳；最小尺寸放宽，
         # 再小的窗口也只是主区内部滚动，页脚 / 状态栏始终可见。
         _sw = self.root.winfo_screenwidth()
         _sh = self.root.winfo_screenheight()
-        # 新主界面按「宣纸页」排版（品牌区 116 + 卡片 + 页脚 126 + 状态栏 34）。
-        # 这两个尺寸还要拿去给背景取色（品牌区 / 印章的底色要贴合该处纸色，见 _build_widgets）。
-        self._win_w = min(1180, int(_sw * 0.86))
-        self._win_h = min(880, int(_sh * 0.88))
-        self.root.geometry("%dx%d" % (self._win_w, self._win_h))
-        # 最小尺寸按新排版重定：1100 宽保证 50:50 等分后两卡各约 506px（按钮文字不换行），
-        # 且顶部「品牌组｜右上入口行」两条带子之间仍留得出安全间距（实测至少 60px，不压叠）；
-        # 690 高保证卡片区放得下左卡内容（实测约 418px），此时不出现滚动条。
-        self.root.minsize(1100, 690)
+        self.root.geometry("%dx%d" % (min(1180, int(_sw * 0.86)),
+                                      min(880, int(_sh * 0.88))))
+        # 最小宽度 1040：保证 50:50 等分后每栏仍有约 494px，左栏按钮与文件名不会被挤变形
+        # v1.0.12：最小高度 600→660。实测主区内容需视口≥394px 才能保证"下一步"按钮
+        # 不被 Canvas 裁掉，而视口 = 窗口高 - 261（顶栏+状态栏+页脚+边距），故窗口≥655 才安全。
+        self.root.minsize(1040, 660)
         # v1.0.10：Windows 上、且屏幕分辨率 ≥ 1440×900 时启动即最大化，
         # 让页脚/状态栏在最大化窗口里绝对可见（避免用户拖到小窗口时把页脚裁掉）；
         # 1366×768 等小屏幕跳过，让用户保留窗口控制权（最大化后无关闭按钮风险）。
@@ -472,18 +459,12 @@ class App:
             pass
         try:
             if os.path.isfile(ICON):
-                # ⚠️ 必须把 PhotoImage 存成属性保留引用：直接写
-                # `root.iconphoto(True, tk.PhotoImage(file=ICON))` 时，这个临时对象
-                # 在语句结束后立刻被 CPython 回收，它的 __del__ 会连带把 Tk 里的图片
-                # 删掉 —— 表现就是「换了图标却还是 Tk 默认羽毛图标」。2026-09-11 实测：
-                # 不保留引用时 GC 后 Tk 的 image names 里查不到我们的图标。
-                self._window_icon = tk.PhotoImage(file=ICON)
-                self.root.iconphoto(True, self._window_icon)
+                self.root.iconphoto(True, tk.PhotoImage(file=ICON))
         except Exception:
-            self._window_icon = None
+            pass
 
-        # 随窗口缩放自适应：监听尺寸变化只重排坐标；字号恒为 TYPE 权威值，不随窗口缩放。
-        self._last_w = None
+        # 随窗口缩放自适应：监听尺寸变化，按宽度比例整体缩放字体
+        self._last_scale = None
         self.root.bind("<Configure>", self._on_resize)
 
         self.thesis_path = tk.StringVar()      # 兼容旧引用（取 thesis_paths[0] 的命名）
@@ -511,22 +492,13 @@ class App:
         self._exported = {}
         self._errored = False
         self._msgs = []
-        # 步骤名走装修包的横向步进器（circle + 标签），标签位只放短名；
-        # 第③步的三种交付方式在右卡的「交付方式」区展开。
         self.step_defs = [("profile", "提取学校模板要求"),
                           ("check", "论文格式检查"),
-                          ("fix", "一键格式修正")]
-        # 每步的说明行（照 COPY_TABLE.md 第 3 节）
-        self.step_descs = ["识别字号、页边距与格式规范",
-                           "快速定位格式问题与待修正项",
-                           "确认后生成符合规范的论文文件"]
+                          ("fix", "选交付方式（只批注 / 只修正 / ①+② 都要）")]
+        self.step_desc = ["识别字号、页边距与格式规范",
+                          "生成格式检查报告，不动文件",
+                          "可三选一：只批注不改原稿、一键修正、或 ①+② 都要"]
         self.step_index = 0
-
-        # 兜底：直接 ``App(root)``（不经 gui.main()）时 F_XXX 字体名尚未建立，界面会
-        # NameError。正规启动路径 main() 已先调 _init_fonts；这里只在缺失时补一次，
-        # 幂等、不改任何业务行为（仅为「构造 App 不抛异常」）。
-        if globals().get("F_BODY") is None:
-            _init_fonts(self.root)
 
         self._build_style()
         self._build_widgets()
@@ -535,7 +507,7 @@ class App:
         # v1.0.32：绿色 zip 版首次启动自动创建桌面快捷方式（静默，仅 Windows 正式版生效）
         self.root.after(800, self._maybe_auto_shortcut)
 
-    # -------------------------------------------------- 窗口尺寸自适应
+    # -------------------------------------------------- 窗口缩放自适应
     def _on_resize(self, _evt=None):
         try:
             w = self.root.winfo_width()
@@ -543,627 +515,428 @@ class App:
             return
         if w < 60:
             return
-        if w == self._last_w:
+        factor = w / BASE_W
+        if self._last_scale is not None and abs(factor - self._last_scale) < 0.02:
             return
-        self._last_w = w
-        # 宽度变了 → 重排一次（背景取色 / 卡片宽度 / 文字位置全部跟着走）
-        self.root.after(1, self._layout)
+        self._last_scale = factor
+        _apply_scale(factor)
 
     # ------------------------------------------------------------- style
     def _build_style(self):
-        """ttk 只留主题 + 进度条样式。
-
-        主界面按钮一律用 ``ui.widgets.RoundButton``（装修包唯一按钮零件），
-        ttk 不再定义自定义按钮样式 —— 同类元素只允许一套规范样式。
-        """
         style = ttk.Style()
         try:
             style.theme_use("clam")
         except Exception:
             pass
-        # 进度条（处理中）取色同样来自 ui.theme，不写第二套色
-        style.configure("Paper.Horizontal.TProgressbar",
-                        background=_ADV.primary, troughcolor=_ADV.disabled_fill,
-                        bordercolor=_ADV.disabled_fill,
-                        lightcolor=_ADV.primary, darkcolor=_ADV.primary)
+        style.configure("TButton", font=F_BODY, padding=(12, 6),
+                        background="#eae3d3", foreground=INK)
+        style.map("TButton", background=[("active", "#ded6c2"), ("disabled", "#f0ece1")])
+        style.configure("Action.TButton", font=F_BTN, padding=(12, 10),
+                        background="#eae3d3", foreground=INK)
+        style.map("Action.TButton",
+                  background=[("active", "#ded6c2"), ("disabled", "#f0ece1")])
+        style.configure("Primary.TButton", font=F_BTN, padding=(12, 10),
+                        background=CINNABAR, foreground="white")
+        style.map("Primary.TButton",
+                  background=[("active", CINNABAR_D), ("disabled", "#c8a79f")],
+                  foreground=[("disabled", "#f5e9e6")])
+        style.configure("Ghost.TButton", font=F_SMALL, padding=(8, 5),
+                        background=PANEL, foreground=ACCENT)
+        style.map("Ghost.TButton",
+                  background=[("active", "#efe9db"), ("disabled", "#f4f0e6")])
 
-    # ------------------------------- 版式常量（唯一来源 = ui.theme 的 SPACING 表）
-    # 字号缩小后这些固定像素高度必须同步收紧，否则会出现「字小了、块还是那么大」的空洞感。
-    MX = SPACING["page_mx"]         # 页面左右留白
-    HEAD_H = SPACING["head_h"]      # 顶部品牌区高度（mark 高 36 / 朱砂竖章随 12pt 字号）
-    FOOT_H = SPACING["foot_h"]      # 页脚高度（细线 + 两行文字）
-    STATUS_H = SPACING["status_h"]  # 状态栏高度
-    CARD_GAP = SPACING["card_gap"]  # 两卡之间的一档留白
-    CARD_PAD = SPACING["card_pad"]  # 卡片内边距（与 RoundCard 的 padx/pady 一致）
-
+    # ------------------------------------------------------------- layout
     def _build_widgets(self):
-        """主界面 = 宣纸页 + 顶部品牌区 + 右上入口行 + 两张并排卡片 + 页脚 + 状态栏。
-
-        版式基准 = 共享完整视觉稿
-        ``_ui_ref/00_READ_FIRST/ORIGINAL_HANDOFF_FILES/01_UI_MOCKUP_REFERENCE.png``
-        （导师版按同一版式装配，只换身份与专属功能）。顶部左侧是品牌组：线描 mark
-        （``brand.build_brand``）＋**大标题**「论文格式医生」＋朱砂**竖**章「导师版」
-        （``brand.build_seal``）＋副标题，四件成组靠左；右上是一条入口行：试用状态胶囊
-        ＋「升级正式版 →」＋「客服微信｜官方公众号｜关于｜帮助」。
-        （``02_ADVISOR/previews/ADVISOR_FINAL_LAYOUT_PREVIEW.png`` 是早期草图，无大标题、
-        无入口行，不作为视觉依据。）
-
-        为什么整页画在背景层 Canvas 上：tkinter 的 widget 一定有底色，用 Frame 铺满窗口
-        就会把宣纸纹理盖成一块纯米白（实测旧界面正是如此）。canvas 的文字与细线没有底色，
-        纹理才透得出来；只有卡片 / 按钮是真正的 widget —— 它们本来就该是「压在纸上的一块面」。
-        全部元素坐标由 ``_layout`` 统一算，不再靠 pack 层层嵌套，从根上杜绝压叠 / 错位 / 截断。
-        """
         self.root.configure(bg=PAPER)
-        page = self._backdrop.canvas
-        if page is None:                      # 背景层异常时的兜底，保证界面照常起
-            page = tk.Canvas(self.root, bg=PAPER, highlightthickness=0)
-            page.place(x=0, y=0, relwidth=1, relheight=1)
-        self._page = page
-        self._body_cv = page                  # 兼容旧引用名（页面滚动就是这个画布）
-        self._laying_out = False
-        self._in_yscroll = False
-        self._sb_shown = False
-        self._foot_top = 0
-        self._status_y = 0
 
-        # 页面滚动条：只在内容确实比窗口高时才 place 出来（验收要求「无多余滚动条」）
-        self._page_sb = ttk.Scrollbar(self.root, orient="vertical", command=page.yview)
-        page.configure(yscrollcommand=self._on_page_yscroll)
-        page.bind("<Configure>", self._layout, add="+")   # add="+"：不覆盖背景层的重绘绑定
+        # 右上角文字链接：关于 ｜ 帮助（黛蓝楷体，文艺学术风）
+        topbar = tk.Frame(self.root, bg=PAPER)
+        topbar.pack(fill="x", padx=20, pady=(10, 0))
+        tk.Label(topbar, text="", bg=PAPER).pack(side="left", expand=True)
 
-        # ---- 顶部品牌组（照视觉稿成组靠左）：线描 mark ＋ 大标题「论文格式医生」
-        #      ＋ 朱砂竖章「导师版」＋ 副标题。四件装进同一个容器里并排，坐标只算容器一处，
-        #      从结构上保证它们永远是一组、不会各自漂移或互相压叠。
-        #      edition 恒为 "advisor" → build_brand / build_seal 渲染的就是导师版身份。
-        head_bg = self._backdrop.sample_hex(self._win_w, self._win_h,
-                                            self.MX, 10, 440, self.HEAD_H - 20)
-        self._brand_group = tk.Frame(page, bg=head_bg)
-        self._brand = brand.build_brand(self._brand_group, self.edition, bg=head_bg)
-        self._brand.pack(side="left")
-        self._seal = brand.build_seal(self._brand_group, self.edition, bg=head_bg,
-                                      scale=1.0)
-        self._seal.pack(side="left", padx=(SPACING["md"], 0))
-        self._brand_win = page.create_window(0, 0, window=self._brand_group, anchor="nw")
+        def _link(parent, text, cmd):
+            lbl = tk.Label(parent, text=text, bg=PAPER, fg=ACCENT,
+                           font=("KaiTi", 13), cursor="hand2")
+            lbl.bind("<Button-1>", lambda e: cmd())
+            lbl.bind("<Enter>", lambda e: lbl.config(fg="#33465c"))
+            lbl.bind("<Leave>", lambda e: lbl.config(fg=ACCENT))
+            return lbl
 
-        # ---- 右上入口行：试用状态胶囊 ＋「升级正式版 →」＋ 客服微信｜官方公众号｜关于｜帮助
-        #      关于 / 帮助 接的仍是既有的 show_about / show_help，只是入口回到视觉稿的右上。
-        self._trial_badge = widgets.Badge(page, kind="trial", edition=self.edition,
-                                          text="试用版")
-        self._badge_win = page.create_window(0, 0, window=self._trial_badge, anchor="e")
-        self._upgrade_btn = widgets.RoundButton(
-            page, edition=self.edition, text="升级正式版 →", style="primary",
-            height=SPACING["field_h"], font=self._theme.sans(TYPE["btn"], bold=True),
-            command=self._show_upgrade_qr)
-        self._upgrade_win = page.create_window(0, 0, window=self._upgrade_btn, anchor="e")
-        self._head_links = [
-            self._paper_entry(page, "客服微信", self._show_service_qr, font=F_BODY),
-            self._paper_entry(page, "官方公众号", self._show_official_qr, font=F_BODY),
-            self._paper_entry(page, "关于", lambda: show_about(self.root), font=F_BODY),
-            self._paper_entry(page, "帮助", lambda: show_help(self.root), font=F_BODY),
-        ]
-        self._head_seps = [
-            page.create_text(0, 0, text="｜", anchor="e", fill=MUTED, font=F_BODY)
-            for _ in range(len(self._head_links) - 1)]
-        self._update_trial_badge()
-
-        # ---- 主体：两张并排卡片（左 文件选择 / 右 处理步骤）
-        self._left_card = widgets.RoundCard(page, edition=self.edition, bg=PAPER,
-                                            corner=PAPER)
-        self._lcard_win = page.create_window(0, 0, window=self._left_card, anchor="nw")
-        self._right_card = widgets.RoundCard(page, edition=self.edition, bg=PAPER,
-                                             corner=PAPER)
-        self._rcard_win = page.create_window(0, 0, window=self._right_card, anchor="nw")
-        self._build_left(self._left_card.inner)
-        self._build_right(self._right_card.inner)
-        # 卡片内容高度会变（选中文件后文件名变长、画像出现 / 删除…）：一变就重排整页，
-        # 保证卡片永远装得下内容，不会出现半截被裁的字。
-        for card in (self._left_card, self._right_card):
-            card.inner.bind("<Configure>", lambda e: self._layout(), add="+")
-
-        # ---- 页脚（COPY_TABLE 第 4 节）：
-        #      上排 左「✉ 邮箱」· 中「专注学术 · 让格式更专业」· 右「🌐 官网」；
-        #      下排 左「客服微信 · 官方公众号」· 中「© 2026 论文格式医生」
-        #           · 右「本机处理 · 文件不会上传任何服务器」。
-        #      （关于 · 帮助 按视觉稿留在右上入口行，页脚不再重复放一份）
-        self._foot_rule = page.create_line(0, 0, 0, 0, fill=LINE)
-        self._foot_mail = page.create_text(
-            0, 0, anchor="w", fill=MUTED, font=F_FOOT, text="✉ " + ABOUT_MAIL)
-        self._foot_slogan = page.create_text(
-            0, 0, anchor="center", fill=MUTED, font=F_FOOT,
-            text="专注学术 · 让格式更专业")
-        self._foot_privacy = page.create_text(
-            0, 0, anchor="e", fill=MUTED, font=F_FOOT,
-            text="本机处理 · 文件不会上传任何服务器")
-        self._foot_copy = page.create_text(
-            0, 0, anchor="center", fill=MUTED, font=F_FOOT,
-            text="© 2026 论文格式医生")
-        # 页脚文字入口：canvas 文字没有底色，宣纸纹理不会被盖住（左→右排列）
-        self._foot_cs = self._paper_entry(page, "客服微信", self._show_service_qr,
-                                          anchor="w")
-        self._foot_cs_dot = page.create_text(0, 0, text="·", anchor="w",
-                                             fill=MUTED, font=F_FOOT)
-        self._foot_off = self._paper_entry(page, "官方公众号", self._show_official_qr,
-                                           anchor="w")
-        self._foot_links = [
-            self._paper_entry(page, OFFICIAL_SITE_TEXT,
-                              lambda: webbrowser.open(OFFICIAL_SITE)),
-        ]
+        _link(topbar, "帮 助", lambda: show_help(self.root)).pack(side="right")
+        tk.Label(topbar, text="｜", bg=PAPER, fg="#c9c0ae",
+                 font=("Microsoft YaHei", 12)).pack(side="right", padx=(0, 8))
+        _link(topbar, "关 于", lambda: show_about(self.root)).pack(side="right", padx=(0, 8))
         # v1.0.31：绿色 zip 版一键补建桌面快捷方式（win32com 已内置 exe，零外部依赖、零黑框）
         if sys.platform.startswith("win") and _is_frozen_exe():
-            self._foot_links.append(
-                self._paper_entry(page, "桌面图标", self._create_desktop_shortcut))
+            tk.Label(topbar, text="｜", bg=PAPER, fg="#c9c0ae",
+                     font=("Microsoft YaHei", 12)).pack(side="right", padx=(0, 8))
+            _link(topbar, "桌面图标", self._create_desktop_shortcut).pack(side="right", padx=(0, 8))
 
-        # ---- 状态栏（页脚下方一行；同样是 canvas 文字，不盖纹理）
-        self.bar_dot_item = page.create_text(0, 0, text="●", anchor="w", fill=OKC, font=F_FOOT)
-        self.bar_left_item = page.create_text(0, 0, text="", anchor="w", fill=MUTED, font=F_FOOT)
-        self.status_dot_item = page.create_text(0, 0, text="●", anchor="e", fill=MUTED, font=F_FOOT)
-        self.status_lbl_item = page.create_text(0, 0, text="", anchor="e", fill=INK, font=F_FOOT)
-        self.bar_right_item = page.create_text(0, 0, text="", anchor="e", fill=MUTED, font=F_FOOT)
-        self.bar_dot = _CanvasText(self, self.bar_dot_item)
-        self.bar_left = _CanvasText(self, self.bar_left_item)
-        self.status_dot = _CanvasText(self, self.status_dot_item)
-        self.status_lbl = _CanvasText(self, self.status_lbl_item)
-        self.bar_right = _CanvasText(self, self.bar_right_item)
-        self._status_rule = page.create_line(0, 0, 0, 0, fill=LINE)
-        # 状态文字走 status_var（既有逻辑只 set 变量 / config 颜色），这里把变量接到画布上
-        self.status_var.trace_add("write",
-                                  lambda *_a: self.status_lbl.config(text=self.status_var.get()))
-        self.status_lbl.config(text=self.status_var.get())
+        # 顶部标题区：标题与"导师版"徽标同排，节省纵向空间
+        header = tk.Frame(self.root, bg=PAPER)
+        header.pack(fill="x", padx=20, pady=(14, 6))
+        _title_row = tk.Frame(header, bg=PAPER)
+        _title_row.pack(anchor="center")
+        tk.Label(_title_row, text="论 文 格 式 医 生", bg=PAPER, fg=INK,
+                 font=F_TITLE).pack(side="left")
+        # 导师版徽标（朱砂红底白字圆角 chip，紧跟标题同排）
+        _badge = tk.Frame(_title_row, bg=CINNABAR, padx=9, pady=2)
+        _badge.pack(side="left", padx=(10, 0))
+        tk.Label(_badge, text="导师版", bg=CINNABAR,
+                 fg="#ffffff", font=("Microsoft YaHei", 12, "bold")).pack()
+        tk.Label(header, text="THESIS FORMAT DOCTOR · 导师专用 · 高校论文格式规范引擎",
+                 bg=PAPER, fg="#8b8378", font=F_SUBTITLE).pack(anchor="center", pady=(6, 0))
+        tk.Frame(self.root, bg=CINNABAR, height=2).pack(fill="x", padx=20)
+
+        # 主体两栏（文件选择 | 处理步骤）
+        # v1.0.11：整块装入可纵向滚动的画布——内容再高也只滚主区，
+        # 下方页脚 / 状态栏始终固定可见（此前内容超高会把他俩挤出窗口底部）。
+        body = tk.Frame(self.root, bg=PAPER)
+        body.pack(fill="both", expand=True, padx=20, pady=14)
+        self._body_cv = tk.Canvas(body, bg=PAPER, highlightthickness=0)
+        _sb = ttk.Scrollbar(body, orient="vertical", command=self._body_cv.yview)
+        self._body_cv.configure(yscrollcommand=_sb.set)
+        _sb.pack(side="right", fill="y")
+        self._body_cv.pack(side="left", fill="both", expand=True)
+
+        main = tk.Frame(self._body_cv, bg=PAPER)
+        _body_win = self._body_cv.create_window((0, 0), window=main, anchor="nw")
+        # 左右严格 50:50 等分。
+        # 关键：仅靠 weight 做不到等宽——grid 先满足各列"固有请求宽度"，右栏内容更宽就会多吃，
+        # 剩下空间才按 weight 分（此前 9:11 实测仍是 43%/57%）。必须用 uniform 把两列
+        # 归为同一尺寸组，tk 才会强制两列等宽；minsize 是小窗口兜底，防止左栏被挤变形。
+        main.columnconfigure(0, weight=1, uniform="half", minsize=470)
+        main.columnconfigure(1, weight=1, uniform="half", minsize=470)
+        main.rowconfigure(0, weight=1)
+        left = tk.Frame(main, bg=PAPER)
+        left.grid(row=0, column=0, sticky="nsew", padx=(0, 12))
+        right = tk.Frame(main, bg=PAPER)
+        right.grid(row=0, column=1, sticky="nsew")
+        self._build_left(left)
+        self._build_right(right)
+
+        def _sync_body(_e=None):
+            w = self._body_cv.winfo_width()
+            h = self._body_cv.winfo_height()
+            if w > 2:
+                self._body_cv.itemconfig(_body_win, width=w)
+            # 内容比可视区矮 → 撑满（两栏等高，留白匀称）；内容更高 → 按实际高度滚动
+            req = main.winfo_reqheight()
+            if h > 2:
+                self._body_cv.itemconfig(_body_win, height=max(req, h))
+            self._body_cv.configure(scrollregion=self._body_cv.bbox("all"))
+
+        main.bind("<Configure>", _sync_body)
+        self._body_cv.bind("<Configure>", _sync_body)
 
         def _on_wheel(e):
             # 焦点在可自行滚动的文本框内时不拦截，避免双重滚动
             if isinstance(e.widget, tk.Text):
                 return
-            page.yview_scroll(int(-1 * (e.delta / 120)), "units")
-            self._backdrop.pin()
+            self._body_cv.yview_scroll(int(-1 * (e.delta / 120)), "units")
 
         self.root.bind_all("<MouseWheel>", _on_wheel)
 
+        # 页脚（两行版权，贴底）
+        footer = tk.Frame(self.root, bg=PAPER)
+        footer.pack(side="bottom", fill="x", pady=(0, 18))
+        tk.Label(footer, text="论文格式医生 · 导师版 — 本机处理，文件不会上传任何服务器",
+                 bg=PAPER, fg=MUTED, font=F_FOOT).pack()
+        f2 = tk.Frame(footer, bg=PAPER)
+        f2.pack(pady=(3, 0))
+        tk.Label(f2,
+                 text="© 2026 论文格式医生 · 公众号【芦苇不熬夜】 ID：reedskill · 合作联系：hi@reedskill.com",
+                 bg=PAPER, fg=MUTED, font=F_FOOT).pack(side="left")
+        _site_label(f2).pack(side="left", padx=(6, 0))
+
+        # 状态栏（顶部细线 + 单行，绝不与其他文字重叠）
+        tk.Frame(self.root, bg=LINE, height=1).pack(fill="x", side="bottom", padx=20)
+        statusbar = tk.Frame(self.root, bg=PANEL)
+        statusbar.pack(side="bottom", fill="x", padx=20, pady=(6, 6))
+        self.bar_dot = tk.Label(statusbar, text="●", bg=PANEL, fg=OKC, font=F_FOOT)
+        self.bar_dot.pack(side="left", padx=(0, 6))
+        self.bar_left = tk.Label(statusbar, text="论文格式医生 · 导师版",
+                                 bg=PANEL, fg=MUTED, font=F_FOOT)
+        self.bar_left.pack(side="left")
+        self.bar_right = tk.Label(statusbar, text="请按步骤操作",
+                                  bg=PANEL, fg=MUTED, font=F_FOOT)
+        self.bar_right.pack(side="right")
+
         self._set_bar("idle")
-        self.root.after(30, self._layout)
-
-    # ------------------------------------------------------------ 版式计算
-    def _paper_entry(self, canvas, text, cmd, anchor="e", font=None):
-        """宣纸页上的文字入口（无底色 / 悬停变色 / 手型光标）。
-
-        为什么要自己画：Label 一定有背景色，会把宣纸纹理盖出一块方底。
-        ``font``：入口行字号（右上入口行 10pt / 页脚 9pt），默认取页脚字号。
-        """
-        item = canvas.create_text(0, 0, text=text, anchor=anchor, fill=ACCENT,
-                                  font=font or F_FOOT)
-        canvas.tag_bind(item, "<Button-1>", lambda e: cmd())
-        canvas.tag_bind(item, "<Enter>",
-                        lambda e: (canvas.itemconfig(item, fill=_ADV.primary_hover),
-                                   canvas.configure(cursor="hand2")))
-        canvas.tag_bind(item, "<Leave>",
-                        lambda e: (canvas.itemconfig(item, fill=ACCENT),
-                                   canvas.configure(cursor="")))
-        return item
-
-    def _text_w(self, item):
-        """canvas 文字项的实测宽度（bbox 在窗口尚未显示时也算得出来）；空串算 0。"""
-        try:
-            if not self._page.itemcget(item, "text"):
-                return 0
-            bb = self._page.bbox(item)
-            if bb:
-                return bb[2] - bb[0]
-        except Exception:
-            pass
-        return 72
-
-    @staticmethod
-    def _widget_w(win):
-        """页面上某个 widget 的实测宽度（取不到时按 146 兜底，绝不因取宽失败把两串摆错位）。"""
-        try:
-            w = win.winfo_reqwidth()
-            if w > 2:
-                return w
-        except Exception:
-            pass
-        return 146
-
-    def _extra_height(self):
-        """两张卡片内容实际需要的高度；比视口高时整页滚动，绝不裁掉内容。"""
-        try:
-            self.root.update_idletasks()
-        except Exception:
-            pass
-        h = 0
-        for card in (getattr(self, "_left_card", None), getattr(self, "_right_card", None)):
-            if card is None:
-                continue
-            try:
-                h = max(h, card.inner.winfo_reqheight() + 2 * self.CARD_PAD + 8)
-            except Exception:
-                continue
-        return int(h)
-
-    def _layout(self, _evt=None):
-        """按窗口尺寸重排整页（页面元素全是 canvas 项，坐标必须自己算）。
-
-        显式坐标的唯一目的：卡片 / 按钮 / 页脚 / 状态栏各自待在自己那一格里，
-        从根上消掉旧版 pack 互相压叠、错位、被裁掉的实测硬伤。
-        """
-        page = getattr(self, "_page", None)
-        if page is None or self._laying_out:
-            return
-        W, H = page.winfo_width(), page.winfo_height()
-        if W < 2 or H < 2:
-            return
-        self._laying_out = True
-        try:
-            mx = self.MX
-            colw = max(340, (W - 2 * mx - self.CARD_GAP) // 2)
-            body_top = self.HEAD_H
-            # 卡片区可用高度 = 窗口高 - 品牌区 - 页脚 - 状态栏 - 卡片与页脚间的一档留白
-            avail = H - self.HEAD_H - self.FOOT_H - self.STATUS_H - 14
-            body_h = max(240, avail, self._extra_height())
-            # 顶部：品牌组（mark＋大标题＋朱砂竖章＋副标题）靠左垂直居中；
-            #      右上入口行整条右对齐 —— 从右往左摆：帮助 … 关于 … 官方公众号 … 客服微信
-            #      → 升级正式版按钮 → 试用状态胶囊。两条带子共用同一条中线，绝不重叠。
-            page.coords(self._brand_win, mx,
-                        max(0, (self.HEAD_H - self._brand_group.winfo_reqheight()) // 2))
-            row_y = self.HEAD_H // 2
-            row = []
-            for i, item in enumerate(self._head_links):
-                row.append(item)
-                if i < len(self._head_seps):
-                    row.append(self._head_seps[i])
-            links_w = sum(self._text_w(i) + 4 for i in row)
-            badge_w = self._widget_w(self._trial_badge)
-            btn_w = self._widget_w(self._upgrade_btn)
-            brand_w = self._brand_group.winfo_reqwidth()
-            one_line = (mx + brand_w + 16 + badge_w + SPACING["sm"] + btn_w
-                        + links_w <= W - mx)
-            # 1100 最小窗实测：单行排不下（品牌组 385 + 入口行 719 + 左右留白 > 1100）。
-            # 排不下时文字入口降一行、徽标与升级按钮留在上一行，两行都右对齐 ——
-            # 五个入口一个不少，且绝不压到品牌组 / 大标题上。
-            top_y = row_y if one_line else row_y - 12
-            links_y = row_y if one_line else row_y + 14
-            x = W - mx
-            for item in reversed(row):
-                page.coords(item, x, links_y)
-                x -= self._text_w(item) + 4
-            if not one_line:
-                x = W - mx
-            page.coords(self._upgrade_win, x, top_y)
-            x -= btn_w + SPACING["sm"]
-            page.coords(self._badge_win, x, top_y)
-            # 主体两卡（严格等宽等高）
-            page.coords(self._lcard_win, mx, body_top)
-            page.itemconfig(self._lcard_win, width=colw, height=body_h)
-            page.coords(self._rcard_win, mx + colw + self.CARD_GAP, body_top)
-            page.itemconfig(self._rcard_win, width=colw, height=body_h)
-            # 页脚：细线 + 上排（邮箱 / 口号 / 官网）+ 下排（客服入口 / 版权 / 本机声明）
-            foot_top = body_top + body_h + 14
-            self._foot_top = foot_top
-            page.coords(self._foot_rule, mx, foot_top, W - mx, foot_top)
-            y1 = foot_top + 20
-            y2 = foot_top + 44
-            page.coords(self._foot_mail, mx, y1)
-            page.coords(self._foot_slogan, W // 2, y1)
-            page.coords(self._foot_privacy, W - mx, y2)
-            page.coords(self._foot_copy, W // 2, y2)
-            x = W - mx
-            for item in reversed(self._foot_links):
-                page.coords(item, x, y1)
-                x -= self._text_w(item) + 18
-            x = mx
-            page.coords(self._foot_cs, x, y2)
-            x += self._text_w(self._foot_cs) + 6
-            page.coords(self._foot_cs_dot, x, y2)
-            x += self._text_w(self._foot_cs_dot) + 6
-            page.coords(self._foot_off, x, y2)
-            # 状态栏（贴页底一行）
-            self._status_y = foot_top + self.FOOT_H + self.STATUS_H // 2 + 2
-            page.coords(self._status_rule, mx, foot_top + self.FOOT_H,
-                        W - mx, foot_top + self.FOOT_H)
-            total = max(foot_top + self.FOOT_H + self.STATUS_H, H)
-            page.configure(scrollregion=(0, 0, W, total))
-            self._layout_status()
-            # 滚动条有无：按可见比例算（不调 yview，避免滚动回调重入）
-            self._on_page_yscroll(1.0 - min(1.0, float(H) / float(total)), 1.0)
-        finally:
-            self._laying_out = False
-
-    def _layout_status(self):
-        """状态栏一行：左边「就绪点 + 就绪文案」，右边「状态 + 提示」右对齐拼排。"""
-        page = getattr(self, "_page", None)
-        if page is None:
-            return
-        W = page.winfo_width()
-        if W < 2:
-            return
-        y = self._status_y
-        mx = self.MX
-        page.coords(self.bar_dot_item, mx, y)
-        page.coords(self.bar_left_item, mx + 16, y)
-        page.coords(self.bar_right_item, W - mx, y)
-        _w_right = self._text_w(self.bar_right_item)
-        x = W - mx - (_w_right + 26 if _w_right else 0)
-        page.coords(self.status_lbl_item, x, y)
-        x -= self._text_w(self.status_lbl_item) + 6
-        page.coords(self.status_dot_item, x, y)
-
-    def _on_page_yscroll(self, first, last):
-        """页面滚动回调：同步滚动条 + 把宣纸图钉回视口 + 按需显隐滚动条。"""
-        if self._in_yscroll:
-            return
-        self._in_yscroll = True
-        try:
-            self._page_sb.set(first, last)
-            self._backdrop.pin()
-            need = (float(last) - float(first)) < 0.999
-            if need and not self._sb_shown:
-                self._page_sb.place(relx=1.0, x=-4, y=8, anchor="ne",
-                                    height=max(80, self._page.winfo_height() - 16))
-                self._page_sb.lift()
-                self._sb_shown = True
-            elif not need and self._sb_shown:
-                self._page_sb.place_forget()
-                self._sb_shown = False
-        except Exception:
-            pass
-        finally:
-            self._in_yscroll = False
 
     # ---------------------------------------------------------- left panel
     def _build_left(self, parent):
-        """左卡：文件选择（上传区 / 批量导入 / 学校模板 / 记住模板 / 批注署名 / 模板说明）。
+        # 文件选择卡片
+        card = tk.Frame(parent, bg=PANEL, highlightthickness=1, highlightbackground=LINE)
+        card.pack(fill="both", expand=True)
 
-        文案一律照 COPY_TABLE.md 第 2 节。导师版专属的批量入口全部用装修包零件
-        （upload-dropzone / folder-button / multi-file-button），接的仍是既有
-        ``_pick_input``（多选）与 ``_pick_folder``（整文件夹，既有批量 Handler），
-        **不新写任何处理逻辑**。
-        """
-        hdr = tk.Frame(parent, bg=PANEL)
-        hdr.pack(fill="x", pady=(0, SPACING["xs"]))
-        tk.Frame(hdr, bg=ACCENT, width=4, height=14).pack(side="left",
-                                                          padx=(0, SPACING["sm"]))
+        hdr = tk.Frame(card, bg=PANEL)
+        hdr.pack(fill="x", padx=14, pady=(12, 6))
+        tk.Frame(hdr, bg=ACCENT, width=4, height=15).pack(side="left", padx=(0, 7))
         tk.Label(hdr, text="文件选择", bg=PANEL, fg=INK, font=F_CARD_HDR).pack(side="left")
-        # 卡片右上注释（视觉稿的浅色说明文字，不再用徽章）
-        tk.Label(hdr, text="支持多种文档格式，智能识别格式要求", bg=PANEL, fg=MUTED,
-                 font=F_FOOT).pack(side="right")
+        tk.Label(hdr, text="本机离线", bg="#e8f0f6", fg=ACCENT, font=F_FOOT,
+                 padx=8, pady=2).pack(side="right")
 
-        # 上传区（upload-dropzone 零件）：点击 / 拖拽选论文文件
-        widgets.DropZone(
-            parent, edition=self.edition, height=SPACING["dropzone_h"],
-            title="点击上传或拖拽文件到此处",
-            subtitle="支持 Word 文档（.docx、.docx）、WPS 格式（.wps）",
-            command=self._pick_input).pack(fill="x")
+        self._thesis_box, self._thesis_name = self._file_row(
+            card, "论", "待处理论文", "必选", CINNABAR,
+            "可多选，或整文件夹批量导入（.docx / .doc / .wps）",
+            "选择论文…", self._pick_input,
+            btn2_text="选择文件夹…", cmd2=self._pick_folder)
+        self._template_box, self._template_name = self._file_row(
+            card, "模", "学校模板", "可选", MUTED,
+            "用于按学校要求检查 / 修正，更贴合要求", "选择…", self._pick_template)
 
-        # 上传按钮（次按钮，secondary-button.svg）
-        up_row = tk.Frame(parent, bg=PANEL)
-        up_row.pack(fill="x", pady=(SPACING["xs"], SPACING["sm"]))
-        widgets.RoundButton(up_row, text="选择文件", edition=self.edition,
-                            style="secondary", height=SPACING["field_h"],
-                            font=F_BTN,
-                            command=self._pick_input).pack(side="left")
-
-        # 批量导入（导师版专属）：整文件夹（folder-button，接既有 _pick_folder 批量
-        # Handler）/ 多文件（multi-file-button，接既有 _pick_input）
-        self._thesis_box, self._thesis_name, self._thesis_dot, self._thesis_lbl = self._file_row(
-            parent, "论", "批量导入论文",
-            "可选择文件夹，也可选择多个文件",
-            "选择多个文件", self._pick_input,
-            btn2_text="选择文件夹", cmd2=self._pick_folder)
-        self._template_box, self._template_name, self._tpl_dot, self._tpl_lbl = self._file_row(
-            parent, "模", "学校模板",
-            "用于按学校要求检查／修正，更贴合要求", "选择模板", self._pick_template,
-            badge_text="可选")
-
-        # 批量处理进度（batch-progress.svg）：只在批量处理中出现，空闲时整块收起，
-        # 不常驻空框。文案照零件：标题「批量处理进度」／计数「%d / %d」
-        # （零件示例 12 / 18）／当前文件「正在处理%s」（零件示例 正在处理论文_12.docx）。
-        self._batch_prog = tk.Frame(parent, bg=PANEL, highlightthickness=1,
-                                    highlightbackground=LINE)
-        _bp_top = tk.Frame(self._batch_prog, bg=PANEL)
-        _bp_top.pack(fill="x", padx=SPACING["md"], pady=(SPACING["sm"], SPACING["xs"]))
-        tk.Label(_bp_top, text="批量处理进度", bg=PANEL, fg=INK,
-                 font=F_SMALL_B).pack(side="left")
-        self._batch_count = tk.Label(_bp_top, text="", bg=PANEL, fg=MUTED,
-                                     font=F_FOOT)
-        self._batch_count.pack(side="right")
-        self._batch_bar = ttk.Progressbar(self._batch_prog, mode="determinate",
-                                          maximum=100, length=100,
-                                          style="Paper.Horizontal.TProgressbar")
-        self._batch_bar.pack(fill="x", padx=12)
-        self._batch_file = tk.Label(self._batch_prog, text="", bg=PANEL, fg=MUTED,
-                                    font=F_FOOT, anchor="w")
-        self._batch_file.pack(fill="x", padx=SPACING["md"],
-                              pady=(SPACING["xs"], SPACING["sm"]))
-
-        # 记住模板：点一下把模板路径存本机，下次打开自动载入；再点取消（按钮绿=已记住）
+        # 🔒 记住模板（显眼高亮框 + 小按钮）：点一下"记住此模板"即保存路径到本机，
+        # 下次打开自动载入，免重复导入；按钮变绿=已记住，再点取消。
         self._tpl_locked = False
-        lock_row = tk.Frame(parent, bg=PANEL)
-        lock_row.pack(fill="x", pady=(0, SPACING["xs"]))
-        self._lock_btn = widgets.RoundButton(
-            lock_row, text="🔒 记住此模板", edition=self.edition, style="secondary",
-            height=SPACING["field_h"], font=F_SMALL, command=self._on_lock_click)
-        self._lock_btn.pack(side="left")
-        self._lock_tip = tk.Label(lock_row, text="", bg=PANEL, fg=OKC, font=F_SMALL_B)
-        self._lock_tip.pack(side="left", padx=(SPACING["sm"], 0))
+        _lock_frame = tk.Frame(card, bg="#fff3df", highlightthickness=1, highlightbackground="#e3a93b")
+        _lock_frame.pack(fill="x", padx=14, pady=(2, 6))
+        self._lock_btn = tk.Button(
+            _lock_frame, text="🔒 记住此模板", relief="flat", font=F_BODY,
+            bg="#e3a93b", fg="#5a3d12", activebackground="#f0bf5e", activeforeground="#5a3d12",
+            padx=12, pady=5, cursor="hand2", command=self._on_lock_click)
+        self._lock_btn.pack(side="left", padx=10, pady=6)
+        self._lock_tip = tk.Label(_lock_frame, text="", bg="#fff3df",
+                                  fg="#2f7d32", font=F_SMALL_B)
+        self._lock_tip.pack(side="left", padx=(2, 10), pady=6)
 
         # 批注署名：导师名，出现在 Word 批注气泡作者栏（默认"论文格式医生·导师版"）
-        auth_row = tk.Frame(parent, bg=PANEL)
-        auth_row.pack(fill="x", pady=(0, SPACING["xs"]))
-        tk.Frame(auth_row, bg=ACCENT, width=4, height=14).pack(side="left",
-                                                              padx=(0, SPACING["sm"]))
-        tk.Label(auth_row, text="批注署名", bg=PANEL, fg=INK,
-                 font=F_SUBTITLE).pack(side="left")
-        tk.Entry(auth_row, textvariable=self.author_var, font=F_SMALL, relief="solid",
-                 bd=1).pack(side="left", padx=(SPACING["sm"], 0), fill="x", expand=True)
+        _auth_row = tk.Frame(card, bg=PANEL)
+        _auth_row.pack(fill="x", padx=14, pady=(2, 2))
+        tk.Frame(_auth_row, bg=ACCENT, width=4, height=15).pack(side="left", padx=(0, 7))
+        tk.Label(_auth_row, text="批注署名", bg=PANEL, fg=INK, font=F_CARD_HDR).pack(side="left")
+        tk.Entry(_auth_row, textvariable=self.author_var, width=22, font=F_SMALL,
+                 relief="solid", bd=1).pack(side="left", padx=(8, 0), fill="x", expand=True)
 
-        # 模板说明常驻（防止客户上传无批注模板造成误解，减少纠纷）：紧凑两行
-        note = tk.Frame(parent, bg=PANEL)
-        note.pack(fill="x")
-        tk.Label(note, text="模板说明", bg=PANEL, fg=_ADV.primary,
-                 font=F_SUBTITLE).pack(anchor="w")
-        tk.Label(note, text="请优先使用学校官方模板（通常批注中写明了格式要求）；若模板无批注，将按模板格式定义／通用规范处理，可能与学校要求有出入。",
-                 bg=PANEL, fg=MUTED, font=F_FOOT, anchor="w", justify="left",
-                 wraplength=420).pack(anchor="w")
+        # v1.3.46：模板驱动说明常驻提示（防止客户上传无批注模板造成误解，减少纠纷）
+        # v1.3.50：升级为标准 Info 提示框——圆角浅色容器 + 加粗标题 + 说明文字行距 1.6
+        def _round_pts(x1, y1, x2, y2, r):
+            return [x1 + r, y1, x2 - r, y1, x2, y1, x2, y1 + r, x2, y2 - r, x2, y2,
+                    x2 - r, y2, x1 + r, y2, x1, y2, x1, y2 - r, x1, y1 + r, x1, y1]
 
-        # 画像状态（提取后由 _update_profile_box 显示在「学校模板」块下方）
-        self.profile_box = tk.Frame(parent, bg=_ADV.success_fill,
-                                    highlightthickness=1, highlightbackground=_ADV.success_border)
-        tk.Label(self.profile_box, text="●", bg=_ADV.success_fill, fg=OKC,
-                 font=F_FOOT).pack(side="left", padx=(SPACING["sm"], SPACING["xs"]),
-                                   pady=SPACING["xs"])
+        tpl_canvas = tk.Canvas(card, bg=PANEL, highlightthickness=0)
+        tpl_canvas.pack(fill="x", padx=14, pady=(4, 2))
+        tpl_body = tk.Frame(tpl_canvas, bg="#fdf3e7")
+        tk.Label(tpl_body, text="模板驱动：以学校模板【批注】写明的格式要求为准（批注优先于样式定义）",
+                 bg="#fdf3e7", fg="#7a4e0e", font=F_SMALL_B,
+                 justify="left", anchor="w").pack(fill="x", padx=14, pady=(9, 0))
+        # 说明文字：Text 的 spacing2 即"段内行距"，实现约 1.6 倍行高；relief=flat 无边框
+        # 注意：tk.Text 的 pady 只接受单值（不支持 (0,9) 元组），下边距放 pack 上
+        tpl_note_txt = tk.Text(tpl_body, wrap="word", bg="#fdf3e7", fg="#8a5a1a",
+                               font=F_FOOT, relief="flat", bd=0, height=3,
+                               spacing1=5, spacing2=5, spacing3=5,
+                               padx=14, highlightthickness=0, cursor="arrow")
+        tpl_note_txt.insert("1.0", "请优先使用学校官方模板（通常批注中写明了格式要求）；"
+                                   "若模板无批注，将按模板样式定义 / 通用规范处理，"
+                                   "可能与学校要求有出入。")
+        tpl_note_txt.config(state="disabled")
+        tpl_note_txt.pack(fill="x", pady=(0, 9))
+        _tpl_rect = tpl_canvas.create_polygon([0, 0, 20, 20], smooth=True,
+                                              fill="#fdf3e7", outline="#e6c794")
+        _tpl_win = tpl_canvas.create_window(1, 1, window=tpl_body, anchor="nw")
+
+        def _resize_tpl(_e=None):
+            w = tpl_canvas.winfo_width()
+            if w <= 2:
+                return
+            tpl_canvas.itemconfig(_tpl_win, width=w - 4)
+            h = tpl_body.winfo_reqheight()
+            tpl_canvas.coords(_tpl_rect, *_round_pts(1, 1, w - 2, h + 2, 10))
+            tpl_canvas.configure(height=h + 4)
+
+        tpl_canvas.bind("<Configure>", _resize_tpl)
+        tpl_body.bind("<Configure>", _resize_tpl)
+        tpl_canvas.after(20, _resize_tpl)
+
+        # 底部选择状态
+        # 选择状态：论文 / 模板 上下两行、左对齐；选中后打对号
+        self._thesis_row = tk.Frame(card, bg=PANEL)
+        self._thesis_row.pack(fill="x", padx=14, pady=(10, 1))
+        self._thesis_dot = tk.Label(self._thesis_row, text="○", bg=PANEL, fg=MUTED, font=F_FOOT)
+        self._thesis_dot.pack(side="left", padx=(0, 6))
+        self._thesis_lbl = tk.Label(self._thesis_row, text="未选择论文", bg=PANEL, fg=MUTED,
+                                    font=F_FOOT)
+        self._thesis_lbl.pack(side="left")
+        self._tpl_row = tk.Frame(card, bg=PANEL)
+        self._tpl_row.pack(fill="x", padx=14, pady=(1, 12))
+        self._tpl_dot = tk.Label(self._tpl_row, text="○", bg=PANEL, fg=MUTED, font=F_FOOT)
+        self._tpl_dot.pack(side="left", padx=(0, 6))
+        self._tpl_lbl = tk.Label(self._tpl_row, text="模板未选（可选）", bg=PANEL, fg=MUTED,
+                                 font=F_FOOT)
+        self._tpl_lbl.pack(side="left")
+
+        # 画像状态（提取后显示）
+        self.profile_box = tk.Frame(card, bg="#f0f3ec",
+                                    highlightthickness=1, highlightbackground="#b7c6ae")
+        tk.Label(self.profile_box, text="●", bg="#f0f3ec", fg=OKC,
+                 font=F_FOOT).pack(side="left", padx=(10, 4), pady=6)
         self.profile_info_var = tk.StringVar(value="已载入格式画像")
-        tk.Label(self.profile_box, textvariable=self.profile_info_var, bg=_ADV.success_fill,
-                 fg=_ADV.success_text, font=F_FOOT).pack(side="left", fill="x", expand=True)
-        widgets.RoundButton(self.profile_box, text="删除 / 取消", edition=self.edition,
-                            style="danger", height=SPACING["btn_h_sm"], font=F_SMALL,
-                            command=self._clear_profile).pack(
-                                side="right", padx=SPACING["sm"], pady=SPACING["xs"])
+        tk.Label(self.profile_box, textvariable=self.profile_info_var, bg="#f0f3ec",
+                 fg="#4c5f49", font=F_FOOT).pack(side="left", fill="x", expand=True)
+        ttk.Button(self.profile_box, text="清除", width=6, style="Ghost.TButton",
+                   command=self._clear_profile).pack(side="right", padx=8, pady=3)
         self._update_profile_box()
 
-        # 卡片底部标语（视觉稿）
-        tk.Label(parent, text="一键规范格式，专注论文内容", bg=PANEL, fg=MUTED,
-                 font=F_FOOT).pack(anchor="center", pady=(SPACING["sm"], 0))
+        # 卡片底部章节小字（文艺学术点缀）
+        tk.Label(card, text="壹 · 选择", bg=PANEL, fg="#b8b0a0",
+                 font=F_FOOT).pack(side="bottom", pady=(0, 8))
 
     @staticmethod
-    def _clip(s, n=24):
+    def _clip(s, n=40):
         """中文按字符截断，超长用省略号；用于文件名/模板名显示，避免撑坏布局。"""
         s = s or ""
         return s if len(s) <= n else s[:n - 1] + "…"
 
-    def _file_row(self, parent, icon, title, desc, btn_text, cmd,
-                  btn2_text=None, cmd2=None, badge_text=None):
-        """一个「文件选择块」：图标 + 标题 + 选择按钮（首行）/ 状态 + 文件名（次行）。
-
-        返回 (外框, 文件名标签, 状态点, 状态文字)：后三个是既有逻辑
-        （_update_thesis_status / _pick_template / _restore_template_lock / _reset_wizard）
-        直接 config 的对象，必须原样交出；这里只改外观。
-        ``badge_text``：标题右侧的浅色小徽章（照视觉稿「可选」），留空则不显示。
-        """
-        box = tk.Frame(parent, bg=PANEL, highlightthickness=1, highlightbackground=LINE)
-        box.pack(fill="x", pady=(0, SPACING["sm"]))
-        row = tk.Frame(box, bg=PANEL)
-        row.pack(fill="x", padx=SPACING["md"], pady=(6, 2))
-        tk.Label(row, text=icon, bg=PANEL, fg=CINNABAR, font=F_ICON, width=2, height=1,
-                 highlightthickness=1,
-                 highlightbackground=CINNABAR).pack(side="left",
-                                                    padx=(0, SPACING["sm"]))
-        tk.Label(row, text=title, bg=PANEL, fg=INK,
-                 font=F_SUBTITLE).pack(side="left")
-        if badge_text:
-            widgets.Badge(row, kind="trial", edition=self.edition,
-                          text=badge_text).pack(side="left", padx=(SPACING["sm"], 0))
-        # 选择按钮走公共零件（次级样式），不再用 ttk Ghost
-        btn_frame = tk.Frame(row, bg=PANEL)
+    def _file_row(self, parent, icon, title, mark, mark_color, desc, btn_text, cmd,
+                  btn2_text=None, cmd2=None):
+        box = tk.Frame(parent, bg="#ffffff", highlightthickness=1, highlightbackground="#e3dccb")
+        box.pack(fill="x", padx=14, pady=6)
+        row = tk.Frame(box, bg="#ffffff")
+        row.pack(fill="x", padx=10, pady=(8, 4))
+        ic = tk.Label(row, text=icon, bg="#ffffff", fg=CINNABAR,
+                      font=F_ICON, padx=7, pady=4,
+                      highlightthickness=1, highlightbackground=CINNABAR)
+        ic.pack(side="left", padx=(0, 8))
+        txt = tk.Frame(row, bg="#ffffff")
+        txt.pack(side="left", fill="x", expand=True)
+        tl = tk.Frame(txt, bg="#ffffff")
+        tl.pack(fill="x")
+        tk.Label(tl, text=title, bg="#ffffff", fg=INK, font=F_SUBTITLE).pack(side="left")
+        tk.Label(tl, text=" " + mark, bg="#ffffff", fg=mark_color, font=F_FOOT).pack(side="left")
+        # 按钮单独放一框，始终横向排列在右上角；避免与文件名挤在同一行被撑到换行
+        # v1.0.10：width=10 给按钮一个最小宽度（≈中文 5 字 + padding），
+        # 防止"选择文件夹…"等较长的按钮文字被窗口主题压成"选择文/件夹…"换行
+        btn_frame = tk.Frame(row, bg="#ffffff")
         btn_frame.pack(side="right")
         if btn2_text and cmd2:
-            widgets.RoundButton(btn_frame, text=btn2_text, edition=self.edition,
-                                style="secondary", height=SPACING["field_h"],
-                                font=F_BTN,
-                                command=cmd2).pack(side="left", padx=(0, SPACING["sm"]))
-        widgets.RoundButton(btn_frame, text=btn_text, edition=self.edition,
-                            style="secondary", height=SPACING["field_h"],
-                            font=F_BTN,
-                            command=cmd).pack(side="left")
-        # 次行：选择状态 + 文件名 / 说明（长文件名按 280px 换行，不会撑破卡片）
-        line2 = tk.Frame(box, bg=PANEL)
-        line2.pack(fill="x", padx=SPACING["md"], pady=(0, 6))
-        dot = tk.Label(line2, text="○", bg=PANEL, fg=MUTED, font=F_FOOT)
-        dot.pack(side="left", padx=(0, SPACING["xs"]))
-        lbl = tk.Label(line2, text="", bg=PANEL, fg=MUTED, font=F_FOOT)
-        lbl.pack(side="left", padx=(0, SPACING["sm"]))
-        name_lbl = tk.Label(line2, text=desc, bg=PANEL, fg=MUTED, font=F_FOOT,
-                            anchor="w", justify="left", wraplength=420)
-        name_lbl.pack(side="left", fill="x", expand=True)
-        return box, name_lbl, dot, lbl
+            ttk.Button(btn_frame, text=btn2_text, width=max(10, _btn_display_width(btn2_text)), style="Ghost.TButton",
+                       command=cmd2).pack(side="left", padx=(0, 6))
+        ttk.Button(btn_frame, text=btn_text, width=max(10, _btn_display_width(btn_text)), style="Ghost.TButton",
+                   command=cmd).pack(side="left")
+        # 文件名/说明文字另起一行，宽度随卡片自适应
+        # v1.0.10：左栏加宽到 540 后，wraplength 从 360 提到 480，给长文件名更宽的展示空间
+        name_lbl = tk.Label(box, text=desc, bg="#ffffff", fg=MUTED, font=F_FOOT,
+                            anchor="w", justify="left", wraplength=480)
+        name_lbl.pack(anchor="w", fill="x", padx=10, pady=(0, 8))
+        return box, name_lbl
 
     # --------------------------------------------------------- right panel
     def _build_right(self, parent):
-        """右卡：处理步骤（步进器 + 交付方式 + 如何工作 + 主操作 + 进度）。
+        # v1.0.14：右栏卡片与左栏严格等高（fill="both", expand=True）。
+        # 用户在验收 v1.0.12 时明确要求"左右处理步骤框一样大"——即便右栏内容少会留白，
+        # 也不接受左右高度不一的观感。空白区域由文艺留白美学收住，底部"贰·处理"小字锚定。
+        card = tk.Frame(parent, bg=PANEL, highlightthickness=1, highlightbackground=LINE)
+        card.pack(fill="both", expand=True)
 
-        文案照 COPY_TABLE.md 第 3 节：标题「处理步骤」、右上「三步完成 / 论文格式检查与修正」、
-        页码「1 / 3」、三步标题与说明、主按钮「下一步：开始检查 →」、底部信任卡。
-        """
-        hdr = tk.Frame(parent, bg=PANEL)
-        hdr.pack(fill="x", pady=(0, 2))
-        tk.Frame(hdr, bg=ACCENT, width=4, height=14).pack(side="left",
-                                                          padx=(0, SPACING["sm"]))
+        # v1.0.12：右栏内容统一走这一个容器，贴顶铺满卡片。
+        _center = tk.Frame(card, bg=PANEL)
+        _center.pack(fill="both", expand=True)
+
+        hdr = tk.Frame(_center, bg=PANEL)
+        hdr.pack(fill="x", padx=14, pady=(12, 4))
+        tk.Frame(hdr, bg=ACCENT, width=4, height=15).pack(side="left", padx=(0, 7))
         tk.Label(hdr, text="处理步骤", bg=PANEL, fg=INK, font=F_CARD_HDR).pack(side="left")
         self._step_counter = tk.Label(hdr, text="1 / 3", bg=PANEL, fg=MUTED, font=F_FOOT)
         self._step_counter.pack(side="right")
-        # 右上斜排小字（视觉稿）：两行右对齐
-        tk.Label(hdr, text="三步完成\n论文格式检查与修正", bg=PANEL, fg=MUTED,
-                 font=F_FOOT, justify="right").pack(side="right", padx=(0, 14))
 
-        # 步进器（装修包零件）：三个圆点 + 连接线 + 短标签；零件已暴露 circles/titles/lines，
-        # 既有 _refresh_wizard / _on_step_done 的 config 调用原样可用。
-        self._stepper = widgets.Stepper(
-            parent, [(label, self.step_descs[i])
-                     for i, (_mode, label) in enumerate(self.step_defs)],
-            edition=self.edition)
-        self._stepper.pack(fill="x", pady=(SPACING["sm"], SPACING["md"]))
-        self._step_circle = self._stepper.circles
-        self._step_title = self._stepper.titles
-        self._step_line = self._stepper.lines
+        self._build_timeline(_center)
 
-        # 交付方式（三选一：只批注 / 一键修正 / ①+② 都要）
-        _mode_hint = tk.Label(parent, text="交付方式：① 只批注不改正文　② 直接改好　③ 两者都要",
-                              bg=PANEL, fg=_ADV.primary, font=F_SMALL_B)
-        _mode_hint.pack(anchor="w", fill="x")
-        # 卡片一窄就按可用宽度折行（不设死 wraplength，宽窗仍保持单行不裁字）
-        parent.bind("<Configure>",
-                    lambda e: _mode_hint.configure(wraplength=max(200, e.width - 4)),
-                    add="+")
-        mode_row = tk.Frame(parent, bg=PANEL)
-        mode_row.pack(fill="x", pady=(SPACING["xs"], SPACING["xs"]))
-        self._btn_annotate = widgets.RoundButton(
-            mode_row, text="① 只批注", edition=self.edition, style="primary",
-            height=SPACING["field_h"],
-            font=F_SMALL, command=lambda: self._set_fix_mode("annotate"))
-        self._btn_annotate.pack(side="left", fill="x", expand=True,
-                                padx=(0, SPACING["sm"]))
-        self._btn_fix = widgets.RoundButton(
-            mode_row, text="② 一键修正", edition=self.edition, style="secondary",
-            height=SPACING["field_h"],
-            font=F_SMALL, command=lambda: self._set_fix_mode("fix"))
-        self._btn_fix.pack(side="left", fill="x", expand=True, padx=(0, SPACING["sm"]))
-        self._btn_both = widgets.RoundButton(
-            mode_row, text="③ ①+② 都要", edition=self.edition, style="secondary",
-            height=SPACING["field_h"],
-            font=F_SMALL, command=lambda: self._set_fix_mode("both"))
+        # 导师版交付方式：三个并排按钮（三选一，选中高亮），紧凑省空间
+        _mode = tk.Frame(_center, bg=PANEL)
+        _mode.pack(fill="x", padx=14, pady=(2, 6))
+        tk.Label(_mode, text="交付方式（三选一：只批注 / 只修正 / ①+② 都要）", bg=PANEL,
+                 fg="#7a4e0e", font=F_SMALL_B).pack(anchor="w", padx=2, pady=(2, 4))
+
+        _btn_row = tk.Frame(_mode, bg=PANEL)
+        _btn_row.pack(fill="x", padx=2, pady=(0, 2))
+        self._btn_annotate = tk.Button(_btn_row, text="① 只批注·不改原稿",
+                                       font=F_BODY, relief="flat",
+                                       command=lambda: self._set_fix_mode("annotate"))
+        self._btn_annotate.pack(side="left", fill="x", expand=True, padx=(0, 4))
+        self._btn_fix = tk.Button(_btn_row, text="② 一键修正·直接改好",
+                                  font=F_BODY, relief="flat",
+                                  command=lambda: self._set_fix_mode("fix"))
+        self._btn_fix.pack(side="left", fill="x", expand=True, padx=(0, 4))
+        self._btn_both = tk.Button(_btn_row, text="③ ①+② 都要",
+                                   font=F_BODY, relief="flat",
+                                   command=lambda: self._set_fix_mode("both"))
         self._btn_both.pack(side="left", fill="x", expand=True)
-        tk.Frame(parent, bg=PANEL, height=SPACING["md"]).pack(fill="x")
+        # 初始高亮（默认"只批注·不改原稿"）
+        self._paint_mode_buttons()
 
-        # 如何工作（装修包 info-panel 零件）
-        widgets.InfoPanel(
-            parent, edition=self.edition, title="如何工作",
-            line1="上传论文 → 检查格式 → 查看问题 → 一键修正",
-            line2="文件默认在本机处理，不会上传到服务器。").pack(fill="x")
+        # v1.0.12：状态行与激活入口独立成一条横向条带容器，再整体 pack 进垂直流。
+        # 此前直接对 card 用 side="left"/"right"，会插进垂直流的残留横向空间，
+        # 把状态与激活按钮顶到卡片中段的怪位置，并把下方主操作按钮挤到可视区外。
+        _statbar = tk.Frame(_center, bg=PANEL)
+        _statbar.pack(fill="x", padx=14, pady=(8, 2))
+        self.status_dot = tk.Label(_statbar, text="●", bg=PANEL, fg=MUTED, font=F_BODY)
+        self.status_dot.pack(side="left", padx=(2, 6))
+        self.status_lbl = tk.Label(_statbar, textvariable=self.status_var, bg=PANEL, fg=INK,
+                                   font=F_STAT)
+        self.status_lbl.pack(side="left")
 
-        # 主操作：上一步 / 下一步（一屏一个主 CTA）
-        btn_row = tk.Frame(parent, bg=PANEL)
-        btn_row.pack(fill="x", pady=(SPACING["md"], 0))
-        self._prev_btn = widgets.RoundButton(
-            btn_row, text="上一步", edition=self.edition, style="secondary",
-            height=SPACING["btn_h"],
-            font=F_BTN, command=self._go_prev)
-        self._prev_btn.pack(side="left", fill="x", expand=True, padx=(0, SPACING["sm"]))
-        self._next_btn = widgets.RoundButton(
-            btn_row, text="下一步：开始检查 →", edition=self.edition, style="primary",
-            height=SPACING["btn_h"],
-            font=F_BTN, command=self._run_step)
-        self._next_btn.pack(side="left", fill="x", expand=True)
+        # v1.3.58：激活/试用状态与入口（未激活=试用版，可随时点激活）
+        self._licensed = trial.is_licensed()
+        self._trial_btn = ttk.Button(_statbar, text="", style="Ghost.TButton",
+                                     command=self._open_activation)
+        self._trial_btn.pack(side="right")
+        self._update_trial_badge()
 
-        # 底部信任卡（视觉稿）：复用同一 info-panel 零件，不另造第二套样式
-        widgets.InfoPanel(
-            parent, edition=self.edition, title="学术规范 · 专业高效",
-            line1="精准识别格式问题，助力您的论文顺利通过审核。").pack(
-                fill="x", pady=(SPACING["md"], 0))
+        btn_row = tk.Frame(_center, bg=PANEL)
+        btn_row.pack(fill="x", padx=14, pady=(8, 10))
+        self._prev_btn = ttk.Button(btn_row, text="上一步", style="TButton",
+                                    command=self._go_prev)
+        self._prev_btn.pack(side="left")
+        self._next_btn = ttk.Button(btn_row, text="下一步", style="Primary.TButton",
+                                    command=self._run_step)
+        self._next_btn.pack(side="right")
 
-        # 进度条：只在处理中由 _set_running(True) 显示，结束即收回，不留灰块
-        self._progress_frame = tk.Frame(parent, bg=PANEL)
-        self.progress = ttk.Progressbar(self._progress_frame, mode="indeterminate",
-                                        length=300, style="Paper.Horizontal.TProgressbar")
+        # v1.0.14：进度条移到"上一步/下一步"按钮下方（独立于状态行），运行时不挤占按钮、不跳动。
+        # 容器默认不 pack（隐藏），运行时由 _set_running(True) 再显示；结束后收回，不留灰块。
+        self._progress_frame = tk.Frame(_center, bg=PANEL)
+        self.progress = ttk.Progressbar(self._progress_frame, mode="indeterminate", length=300)
+
+        # 卡片底部章节小字（文艺学术点缀）
+        tk.Label(card, text="贰 · 处理", bg=PANEL, fg="#b8b0a0",
+                 font=F_FOOT).pack(side="bottom", pady=(0, 8))
 
         self._refresh_wizard()
+
+    # ----------------------------------------------------- 步骤时间线（向导）
+    def _build_timeline(self, parent):
+        # v1.0.12：流程区保持紧凑、按内容高度排列。
+        # 曾尝试让流程区 expand 吸收剩余空间，但窗口不够高时会把下方"交付方式/主操作按钮"
+        # 整体推出 Canvas 视口，小屏下必须滚动才能点到按钮，故改回紧凑布局。
+        tl = tk.Frame(parent, bg=PANEL)
+        tl.pack(fill="x", padx=14, pady=(4, 2))
+        self._step_circle = []
+        self._step_title = []
+        self._step_line = []
+        n = len(self.step_defs)
+        for i, (mode, label) in enumerate(self.step_defs):
+            # v1.0.12：行距/连接线略收紧，让下方主操作按钮整体上移，
+            # 小窗口下不至于被 Canvas 视口切掉半个按钮（视觉上几乎无差别）
+            row = tk.Frame(tl, bg=PANEL)
+            row.pack(fill="x", pady=1)
+            col = tk.Frame(row, bg=PANEL)
+            col.pack(side="left", padx=(0, 10))
+            circ = tk.Label(col, text=str(i + 1), bg="#ffffff", fg="#8b8378",
+                            font=F_STAT, width=2, height=1, relief="flat",
+                            highlightthickness=1, highlightbackground="#c9c1ae")
+            circ.pack()
+            line = None
+            if i < n - 1:
+                line = tk.Frame(col, width=2, height=16, bg="#e3dccb")
+                line.pack()
+            self._step_circle.append(circ)
+            self._step_line.append(line)
+            txt = tk.Frame(row, bg=PANEL)
+            txt.pack(side="left", fill="x", expand=True)
+            title = tk.Label(txt, text=label, bg=PANEL, fg=MUTED, font=F_SUBTITLE)
+            title.pack(anchor="w")
+            tk.Label(txt, text=self.step_desc[i], bg=PANEL, fg=MUTED,
+                     font=F_SMALL).pack(anchor="w")
+            self._step_title.append(title)
 
     def _refresh_wizard(self):
         """根据 step_index / _errored / 当前交付方式的 _fix_phase 重绘时间线、计数与按钮三态。"""
@@ -1179,24 +952,23 @@ class App:
             is_done = i < self.step_index or (
                 i == n - 1 and _cur_done)
             if is_done:
-                circ.config(bg=PANEL, fg=OKC, highlightbackground=OKC, text="✔")
+                circ.config(bg="#ffffff", fg=OKC, highlightbackground=OKC, text="✔")
                 title.config(fg=INK)
                 if line: line.config(bg=OKC)
             elif i == self.step_index and self._errored:
-                circ.config(bg=PANEL, fg=ERRC, highlightbackground=ERRC, text="✕")
+                circ.config(bg="#ffffff", fg=ERRC, highlightbackground=ERRC, text="✕")
                 title.config(fg=INK)
-                if line: line.config(bg=_ADV.stepper_line)
+                if line: line.config(bg="#e3dccb")
             elif i == self.step_index:
-                # 当前步：实心主色圆 + 白字（照装修包 stepper.svg 的选中态）
-                circ.config(bg=ACCENT, fg="#FFFFFF", highlightbackground=ACCENT,
-                            text=str(i + 1))
+                circ.config(bg="#ffffff", fg=ACCENT, highlightbackground=ACCENT,
+                           text=str(i + 1))
                 title.config(fg=INK)
-                if line: line.config(bg=_ADV.stepper_line)
+                if line: line.config(bg="#e3dccb")
             else:
-                circ.config(bg=PANEL, fg=_ADV.muted, highlightbackground=_ADV.border,
+                circ.config(bg="#ffffff", fg="#8b8378", highlightbackground="#c9c1ae",
                             text=str(i + 1))
                 title.config(fg=MUTED)
-                if line: line.config(bg=_ADV.stepper_line)
+                if line: line.config(bg="#e3dccb")
         self._step_counter.config(text="%d / %d" % (min(self.step_index + 1, n), n))
         if self.step_index >= n:
             self._next_btn.config(text="再处理一篇", command=self._reset_wizard, state="normal")
@@ -1230,7 +1002,7 @@ class App:
                 self._prev_btn.config(text="再处理一篇", state="normal",
                                       command=self._reset_wizard)
         else:
-            self._next_btn.config(text="下一步：开始检查 →", command=self._run_step,
+            self._next_btn.config(text="下一步", command=self._run_step,
                                   state="disabled" if self.running else "normal")
             self._prev_btn.config(text="上一步",
                                   state="disabled" if (self.running or self.step_index == 0) else "normal",
@@ -1239,14 +1011,11 @@ class App:
     def _set_bar(self, state, hint=None):
         """底部状态栏：idle / running / done / error。"""
         cmap = {"idle": OKC, "running": RUN, "done": OKC, "error": ERRC}
-        # 左侧固定身份行（状态由圆点颜色 + 右侧状态文字表达）；右侧提示空闲时留空，
-        # 免得「请按步骤操作」在一条状态栏里出现两遍。
-        _ident = "论文格式医生 · 导师版 v%s · 本机处理" % APP_VERSION
         tmap = {
-            "idle": (_ident, ""),
-            "running": (_ident, hint or widgets.COPY["processing"]),
-            "done": (_ident, widgets.COPY["done"]),
-            "error": (_ident, widgets.COPY["error"]),
+            "idle": ("就绪 · 论文格式医生·导师版 v%s · 本机处理" % APP_VERSION, "请按步骤操作"),
+            "running": ("处理中…", hint or "正在处理"),
+            "done": ("已完成", "可再处理一篇"),
+            "error": ("出错", "请重试或联系客服"),
         }
         left, right = tmap.get(state, tmap["idle"])
         c = cmap.get(state, MUTED)
@@ -1255,7 +1024,7 @@ class App:
         self.bar_right.config(text=right)
 
     def _on_step_done(self, idx, mode):
-        self._step_circle[idx].config(bg=PANEL, fg=OKC, highlightbackground=OKC, text="✔")
+        self._step_circle[idx].config(bg="#ffffff", fg=OKC, highlightbackground=OKC, text="✔")
         self._step_title[idx].config(fg=INK)
         if self._step_line[idx]:
             self._step_line[idx].config(bg=OKC)
@@ -1267,7 +1036,7 @@ class App:
             self._set_bar("done")
         else:
             self.step_index = idx + 1
-            self._set_status(widgets.COPY["done"], OKC)
+            self._set_status("已完成", OKC)
             self._set_bar("done")
         self._refresh_wizard()
 
@@ -1275,7 +1044,7 @@ class App:
         self._errored = True
         if mode == "fix":
             self._fix_phase[self._fix_mode] = "idle"
-        self._set_status(widgets.COPY["error"], ERRC)
+        self._set_status("未能完成，请查看提示", ERRC)
         self._set_bar("error")
         self._refresh_wizard()
         title = "处理出错"
@@ -1292,12 +1061,12 @@ class App:
 
     # --------------------------------------------------------------- picks
     def _update_thesis_status(self):
-        """根据已选论文数刷新『批量导入论文』那行的显示：已选择 N 篇论文。"""
+        """根据已选论文数刷新『待处理论文』那行的显示：已选择 N 篇论文。"""
         n = len(getattr(self, "thesis_paths", []))
         if n == 0:
             self._thesis_lbl.config(text="未选择论文", fg=MUTED)
             self._thesis_name.config(
-                text="可选择文件夹，也可选择多个文件", fg=MUTED)
+                text="可多选，或整文件夹批量导入（.docx / .doc / .wps）", fg=MUTED)
             self._thesis_dot.config(text="○", fg=MUTED)
             return
         self._thesis_dot.config(text="✓", fg=OKC)
@@ -1312,7 +1081,7 @@ class App:
 
     def _pick_input(self):
         paths = filedialog.askopenfilenames(
-            title="选择待导入论文（可多选批量导入）",
+            title="选择待处理论文（可多选批量导入）",
             filetypes=[("Word 文档", "*.docx *.doc *.wps"), ("所有文件", "*.*")])
         if paths:
             self.thesis_paths = list(paths)
@@ -1350,7 +1119,7 @@ class App:
             self._template_name.config(text=self._clip(os.path.basename(p)), fg=INK)
             self._tpl_dot.config(text="✓", fg=OKC)
             self._tpl_lbl.config(text="模板已选择", fg=INK)
-            # 换了新模板：重新允许提取画像（去掉"放弃"标记）
+            # 换了新模板：重新允许提取画像（清除"放弃"标记）
             self._profile_abandoned = False
             self._profile_confirmed = False
             if self._tpl_locked:
@@ -1368,8 +1137,7 @@ class App:
                 json.dump({"path": path}, f, ensure_ascii=False)
             self._tpl_locked = True
             self._paint_lock_btn()
-            # 提示条文案照 COPY_TABLE 第 5 节
-            self._flash_lock(widgets.COPY["toast_saved"])
+            self._flash_lock("✓ 已记住，下次打开自动载入")
         except Exception as e:
             self._debug("[模板锁定保存失败] " + str(e))
 
@@ -1395,16 +1163,13 @@ class App:
         self._flash_lock("已取消记住")
 
     def _paint_lock_btn(self):
-        """根据 _tpl_locked 刷新『记住此模板』按钮：实底=已记住，描边=未记住。
-
-        旧的橙底/绿底 tk.Button 是上一版遗留的警示配色，改用公共零件后与全站按钮同款。
-        """
+        """根据 _tpl_locked 刷新『记住此模板』按钮样式：绿底=已记住，橙底=未记住。"""
         if self._tpl_locked:
-            self._lock_btn.set_text("✓ 已记住（点此取消）")
-            self._lock_btn.set_style("primary")
+            self._lock_btn.config(text="✓ 已记住（点此取消）", bg="#2f7d32", fg="white",
+                                  activebackground="#3c9a40", activeforeground="white")
         else:
-            self._lock_btn.set_text("🔒 记住此模板")
-            self._lock_btn.set_style("secondary")
+            self._lock_btn.config(text="🔒 记住此模板", bg="#e3a93b", fg="#5a3d12",
+                                  activebackground="#f0bf5e", activeforeground="#5a3d12")
 
     def _flash_lock(self, msg):
         """在按钮旁短暂显示提示文字，1.8 秒后清空。"""
@@ -1444,17 +1209,16 @@ class App:
         self._update_profile_box()
 
     def _paint_mode_buttons(self):
-        """按当前 _fix_mode 高亮三个交付方式按钮（选中=主色实底，未选=描边）。
-
-        样式走公共零件 RoundButton.set_style，不再给旧 tk.Button 逐色 config
-        （旧写法既写死了第二套色，也做不出新设计的描边/实底两态）。
-        """
+        """按当前 _fix_mode 高亮三个交付方式按钮（选中=朱砂底白字，未选=纸色）。"""
         if getattr(self, "_btn_annotate", None) is None:
             return
-        for mode, btn in (("annotate", self._btn_annotate),
-                          ("fix", self._btn_fix),
-                          ("both", self._btn_both)):
-            btn.set_style("primary" if self._fix_mode == mode else "secondary")
+        _on = dict(bg=CINNABAR, fg="white", activebackground=CINNABAR_D,
+                   activeforeground="white")
+        _off = dict(bg="#efe9db", fg=INK, activebackground="#ded6c2",
+                    activeforeground=INK)
+        self._btn_annotate.config(**(_on if self._fix_mode == "annotate" else _off))
+        self._btn_fix.config(**(_on if self._fix_mode == "fix" else _off))
+        self._btn_both.config(**(_on if self._fix_mode == "both" else _off))
 
     def _set_fix_mode(self, mode):
         """切换第③步交付方式：annotate=只批注不修改（默认）/ fix=一键修正 / both=①+② 都要。"""
@@ -1481,7 +1245,7 @@ class App:
                 "确定要重新生成并导出（覆盖）吗？\n"
                 "选「否」则可直接切换其他交付方式继续。" % (label, files)):
             return
-        # 重新生成：退回待生成状态并清空旧导出记录（生成→保存后重新记录），
+        # 重新生成：退回待生成状态并清除旧导出记录（生成→保存后重新记录），
         # 走完整第③步流程（产出重新写入 _fix_outs 后再导出）
         self._fix_phase[mode] = "idle"
         self._exported.pop(mode, None)
@@ -1498,7 +1262,7 @@ class App:
         if self.running or self.step_index <= 0:
             return
         if self.step_index == len(self.step_defs) - 1 and self._fix_phase.get(self._fix_mode, "idle") != "idle":
-            # 上一步 = 明确重做：退回该交付方式的"待生成"状态，并清空其导出记录，
+            # 上一步 = 明确重做：退回该交付方式的"待生成"状态，并清除其导出记录，
             # 按钮恢复为「生成…」而非「已完成」（否则 exported 残留会让按钮卡在已完成）。
             self._fix_phase[self._fix_mode] = "idle"
             self._exported.pop(self._fix_mode, None)
@@ -1509,7 +1273,7 @@ class App:
             return
         self.step_index -= 1
         self._errored = False
-        # v1.3.49：回退后允许重新确认画像（去掉"放弃"标记）
+        # v1.3.49：回退后允许重新确认画像（清除"放弃"标记）
         self._profile_abandoned = False
         self._set_status("请按步骤操作", MUTED)
         self._set_bar("idle")
@@ -1529,7 +1293,7 @@ class App:
 
         # 校验：论文文件必选（可批量，模板可选）
         if not self.thesis_paths:
-            messagebox.showerror("缺少输入", "请先选择“批量导入论文”（可多选批量导入）。")
+            messagebox.showerror("缺少输入", "请先选择“待处理论文”（可多选批量导入）。")
             return
 
         # 批量（≥2 篇）：检查 / 修正都走批量。先让客户选输出文件夹，再线程批量处理（避免逐个弹保存框）。
@@ -1627,7 +1391,7 @@ class App:
         def _apply():
             if running:
                 # v1.0.14：进度条显示到"上一步/下一步"按钮下方的独立容器。
-                self._progress_frame.pack(fill="x", pady=(10, 0))
+                self._progress_frame.pack(fill="x", padx=14, pady=(2, 6))
                 self.progress.pack(fill="x", padx=2, pady=2)
                 self.progress.start(12)
                 self._next_btn.config(state="disabled")
@@ -1635,38 +1399,10 @@ class App:
                 self.progress.stop()
                 self.progress.pack_forget()
                 self._progress_frame.pack_forget()
-                self._batch_hide()
                 # v1.0.14：结束态用 _refresh_wizard 重新派生按钮三态——
                 # 修复此前无条件 state="normal" 把"完成"态（应置灰）错误恢复成可点的 bug。
                 self._refresh_wizard()
         self.root.after(0, _apply)
-
-    # ------------------------------------------------- 批量处理进度（纯 UI 刷新）
-    def _batch_tick(self, done, total, name):
-        """批量进度块：只刷新渲染对象，不参与也不改变任何处理逻辑。
-
-        调用点在 worker 线程 → 一律经 after(0) 切回主线程再碰 Tk（与 _set_status 同规矩）。
-        """
-        self.root.after(0, lambda: self._batch_tick_ui(done, total, name))
-
-    def _batch_tick_ui(self, done, total, name):
-        prog = getattr(self, "_batch_prog", None)
-        if prog is None:
-            return
-        if not prog.winfo_ismapped():
-            prog.pack(fill="x", pady=(0, 8), before=self._thesis_box)
-        self._batch_count.config(text="%d / %d" % (done, total))
-        self._batch_file.config(text="正在处理%s" % name)
-        try:
-            self._batch_bar.config(value=(100.0 * done / total) if total else 0)
-        except Exception:
-            pass
-
-    def _batch_hide(self):
-        """收起批量进度块（空闲时不留空框）。"""
-        prog = getattr(self, "_batch_prog", None)
-        if prog is not None and prog.winfo_ismapped():
-            prog.pack_forget()
 
     # --------------------------------------------------- profile 提取与确认
     def _extract_profile(self, src):
@@ -1771,61 +1507,55 @@ class App:
     def _profile_confirm_dialog(self, profile):
         """“学校模板要求 · 请确认”弹窗：只读摘要 + 可修改关键项。返回 (ok, edits)。"""
         result = {"ok": False, "edits": []}
-        t = self._theme
-        # 高度按屏幕夹取，避免 768 高屏把「确认 / 放弃」按钮挤出屏外（overrideredirect 无标题栏拖不动）
-        try:
-            _sh = self.root.winfo_screenheight()
-        except Exception:
-            _sh = 768
-        _dlg_h = min(780, max(520, _sh - 100))
-        top = ModalShell(self.root, edition=self.edition,
-                         title="学校模板要求 · 请确认", width=680, height=_dlg_h)
-        tk.Label(top.body, text="已提取出学校模板的格式要求", bg=t.modal_fill, fg=t.modal_title,
-                 font=t.serif(TYPE["section_title"], bold=True)).pack(anchor="w", pady=(8, 2))
-        tk.Label(top.body, text="请核对是否与学校规定一致；如有不准，可直接修改后确认。",
-                 bg=t.modal_fill, fg=t.modal_sub,
-                 font=t.sans(TYPE["caption"])).pack(anchor="w", pady=(0, 6))
+        top = tk.Toplevel(self.root)
+        top.title("学校模板要求 · 请确认")
+        top.configure(bg=PAPER)
+        top.transient(self.root)
+        top.grab_set()
+        top.geometry(_geo(620, 620) + "+%d+%d" % (self.root.winfo_rootx() + 90,
+                                                  self.root.winfo_rooty() + 30))
+
+        tk.Label(top, text="已提取出学校模板的格式要求", bg=PAPER, fg=INK,
+                 font=F_DIALOG_TITLE).pack(pady=(14, 2))
+        tk.Label(top, text="请核对是否与学校规定一致；如有不准，可直接修改后确认。",
+                 bg=PAPER, fg=MUTED, font=F_SMALL).pack(pady=(0, 6))
 
         # v1.3.46：批注来源提示——有批注=绿色"以批注为准"；无批注=红色警告（防误解、减纠纷）
         _n_cmt = int((profile or {}).get("comment_count", 0) or 0)
         if _n_cmt > 0:
-            src_note = tk.Frame(top.body, bg=t.success_fill, highlightthickness=1,
-                                highlightbackground=t.success_border)
+            src_note = tk.Frame(top, bg="#eef4ea", highlightthickness=1,
+                                highlightbackground="#b9cdaa")
             src_txt = "已读取学校模板批注 %d 条 —— 以下要求以【批注】为准（最权威）。" % _n_cmt
-            src_fg = t.success_text
+            src_fg = "#3f6b35"
         else:
-            src_note = tk.Frame(top.body, bg=t.error_fill, highlightthickness=1,
-                                highlightbackground=t.error_border)
+            src_note = tk.Frame(top, bg="#fbeae8", highlightthickness=1,
+                                highlightbackground="#e0b4ae")
             src_txt = ("该模板【未检测到批注】。学校批注是最权威的格式要求；"
                        "无批注时以下要求来自模板样式定义 / 通用规范，"
                        "可能与学校规定有出入，请仔细核对后再确认。")
-            src_fg = t.error_text
-        src_note.pack(fill="x", pady=(0, 6))
+            src_fg = "#9e3b30"
+        src_note.pack(fill="x", padx=16, pady=(0, 6))
         tk.Label(src_note, text=src_txt, bg=src_note.cget("bg"), fg=src_fg,
-                 font=t.sans(TYPE["caption"]), justify="left", anchor="w",
+                 font=F_SMALL, justify="left", anchor="w",
                  wraplength=560).pack(fill="x", padx=10, pady=6)
 
-        sum_f = tk.Frame(top.body, bg=t.surface, highlightthickness=1, highlightbackground=t.border)
-        sum_f.pack(fill="x", pady=3)
-        sum_txt = tk.Text(sum_f, height=6, wrap="word", bg=t.surface, fg=t.modal_sub,
-                          font=t.sans(TYPE["caption"]), relief="flat", padx=10, pady=6)
+        sum_f = tk.Frame(top, bg=PANEL, highlightthickness=1, highlightbackground=LINE)
+        sum_f.pack(fill="x", padx=16, pady=3)
+        sum_txt = tk.Text(sum_f, height=6, wrap="word", bg="#fbf8f1", fg=INK,
+                          font=F_SMALL, relief="flat", padx=10, pady=6)
         sum_txt.insert("1.0", "\n".join(_profile_summary(profile)))
         sum_txt.config(state="disabled")
         sum_txt.pack(fill="x")
 
-        tk.Label(top.body, text="如需修正，直接修改下列项目（留空表示保持提取结果）",
-                 bg=t.modal_fill, fg=t.primary, font=t.sans(TYPE["body"], bold=True)).pack(
-            anchor="w", pady=(8, 2))
+        tk.Label(top, text="如需修正，直接修改下列项目（留空表示保持提取结果）",
+                 bg=PAPER, fg=ACCENT, font=F_SMALL).pack(anchor="w", padx=18, pady=(8, 2))
 
-        # 内容区（含可滚动表单）占满剩余空间，按钮固定底部
-        content = tk.Frame(top.body, bg=t.modal_fill)
-        content.pack(fill="both", expand=True, pady=3)
-        # 表单区：canvas 与滚动条同在一个 frame 内，滚动条贴右侧整个高度
-        form_area = tk.Frame(content, bg=t.modal_fill)
-        form_area.pack(fill="both", expand=True)
-        canvas = tk.Canvas(form_area, bg=t.modal_fill, highlightthickness=0)
+        # 表单区：canvas 与滚动条同在一个 frame 内，滚动条贴右侧整个高度（不沉到右下角）
+        form_area = tk.Frame(top, bg=PAPER)
+        form_area.pack(fill="both", expand=True, padx=(18, 0), pady=3)
+        canvas = tk.Canvas(form_area, bg=PAPER, highlightthickness=0)
         vbar = ttk.Scrollbar(form_area, orient="vertical", command=canvas.yview)
-        form = tk.Frame(canvas, bg=t.modal_fill)
+        form = tk.Frame(canvas, bg=PAPER)
         form.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
         canvas.create_window((0, 0), window=form, anchor="nw")
         canvas.configure(yscrollcommand=vbar.set)
@@ -1846,31 +1576,27 @@ class App:
 
         entries = {}
         for i, (label, candidates, kind) in enumerate(EDIT_FIELDS):
-            tk.Label(form, text=label, bg=t.modal_fill, fg=t.modal_sub,
-                     font=t.sans(TYPE["body"])).grid(
+            tk.Label(form, text=label, bg=PAPER, fg=INK, font=F_SMALL).grid(
                 row=i, column=0, sticky="e", padx=(0, 10), pady=3)
             cur = _field_value(profile, candidates)
             if kind == "align":
                 var = tk.StringVar(value=ALIGN_DISPLAY.get(cur, cur))
-                cb = ttk.Combobox(form, textvariable=var, width=20,
-                                  font=t.sans(TYPE["body"]),
+                cb = ttk.Combobox(form, textvariable=var, width=20, font=F_SMALL,
                                   values=list(ALIGN_DISPLAY.values()), state="readonly")
                 cb.grid(row=i, column=1, sticky="w", pady=3)
                 entries[i] = (candidates, var, "align", var.get())
             elif kind == "ref":
                 has_ref = bool(cur)
                 var = tk.StringVar(value="已提取" if has_ref else "未提取（按通用规范检查）")
-                tk.Entry(form, textvariable=var, width=28, font=t.sans(TYPE["body"]),
-                         relief="flat", bd=0, bg=t.modal_fill, state="disabled",
-                         disabledforeground=t.success_text if has_ref else t.muted).grid(
+                tk.Entry(form, textvariable=var, width=28, font=F_SMALL,
+                         relief="flat", bd=0, bg=PAPER, state="disabled",
+                         disabledforeground=OKC if has_ref else MUTED).grid(
                     row=i, column=1, sticky="w", pady=3)
                 entries[i] = (candidates, var, "ref", var.get())
             else:
                 var = tk.StringVar(value=cur)
-                tk.Entry(form, textvariable=var, width=22, font=t.sans(TYPE["body"]),
-                         relief="solid", bd=1, highlightthickness=1,
-                         highlightbackground=t.select_border).grid(
-                    row=i, column=1, sticky="w", pady=3)
+                tk.Entry(form, textvariable=var, width=22, font=F_SMALL,
+                         relief="solid", bd=1).grid(row=i, column=1, sticky="w", pady=3)
                 entries[i] = (candidates, var, "text", var.get())
 
         _NUM_FIELDS = ("indent_chars", "line_val", "top_cm", "bottom_cm",
@@ -1923,17 +1649,17 @@ class App:
             result["ok"] = False
             top.destroy()
 
-        btns = tk.Frame(top.body, bg=t.modal_fill)
-        btns.pack(side="bottom", fill="x", pady=(8, 2))
-        widgets.RoundButton(btns, text="确认，使用此要求", edition=self.edition, style="primary",
-                            height=SPACING["btn_h"], font=t.sans(TYPE["btn"], bold=True),
-                            command=on_confirm).pack(side="left", padx=(0, 8))
-        widgets.RoundButton(btns, text="放弃（不使用画像）", edition=self.edition, style="secondary",
-                            height=SPACING["btn_h"],
-                            font=t.sans(TYPE["btn_small"], bold=True),
-                            command=on_cancel).pack(side="left")
+        # 按钮区固定底部（表单区自动占据剩余空间并可滚动，滚动条置顶）
+        btns = tk.Frame(top, bg=PAPER)
+        btns.pack(side="bottom", fill="x", pady=10)
+        # 重新 pack 表单区：让出底部给按钮，保证滚动到底/任何位置按钮都贴底可见
+        form_area.pack_forget()
+        form_area.pack(fill="both", expand=True, padx=(18, 0), pady=3)
+        ttk.Button(btns, text="确认，使用此要求", style="Primary.TButton",
+                   command=on_confirm).pack(side="left", padx=6)
+        ttk.Button(btns, text="放弃（不使用画像）", command=on_cancel).pack(side="left", padx=6)
         top.after(10, lambda: canvas.yview_moveto(0))
-        top.center_on(self.root)
+
         top.wait_window()
         return result["ok"], result["edits"]
 
@@ -2041,8 +1767,8 @@ class App:
                 report = engine.run_fix_headings(
                     docx_path, odst, profile_path=profile,
                     report_docx=rep, add_comments=True, author=author, xlsx_path=xlsx)
-                # 参考文献 GB/T 7714 重排（与学生的"参考文献+报告优化"范围对齐）：
-                # 在标题/正文修正之后独立 pass 执行；失败不影响主交付物（已修正论文 odst）。
+                # 参考文献 GB/T 7714 重排（用户选定的优化项）：修正之后独立 pass 执行；
+                # 失败不影响主交付物（已修正论文）。
                 try:
                     _ref_out = os.path.splitext(odst)[0] + "_ref.docx"
                     engine.run_reformat_refs(odst, _ref_out)
@@ -2100,8 +1826,6 @@ class App:
             group_cats = []
             for i, src in enumerate(self.thesis_paths, 1):
                 self._set_status("正在处理第 %d/%d 篇：%s" % (i, total, os.path.basename(src)), RUN)
-                # 同一时机刷新批量进度块（纯 UI 渲染，不影响下面的处理流程）
-                self._batch_tick(i, total, os.path.basename(src))
                 try:
                     docx_path, note = engine.normalize_input(src)
                 except Exception as e:
@@ -2136,18 +1860,6 @@ class App:
                                 engine.run_fix_headings(docx_path, dst, profile_path=profile,
                                                         report_docx=rep, add_comments=True,
                                                         author=author, xlsx_path=xlsx)
-                                # 参考文献 GB/T 7714 重排（与单篇「一键修正」对齐）
-                                try:
-                                    _ref_out = os.path.splitext(dst)[0] + "_ref.docx"
-                                    engine.run_reformat_refs(dst, _ref_out)
-                                    if os.path.isfile(_ref_out):
-                                        try:
-                                            os.replace(_ref_out, dst)
-                                        except Exception:
-                                            if os.path.isfile(_ref_out):
-                                                os.remove(_ref_out)
-                                except Exception as e:
-                                    self._debug("[批量参考文献重排跳过] " + str(e))
                                 try:
                                     cr = engine.run_check(dst, profile_path=profile)
                                     engine.md_to_docx(cr, chk)
@@ -2259,137 +1971,27 @@ class App:
         return bool(box.get("ok", False))
 
     def _show_trial_exhausted(self):
-        """试用次数用完：弹购买引导（小程序码 + 去激活入口）。
-
-        可能在 worker 线程也可能在**主线程**（root.after 排程）被调用：
-          * worker 线程 → 用 Event 等主线程把弹窗弹完再返回；
-          * 主线程     → **直接弹**，绝不能 ev.wait()：那会阻塞事件循环，
-                         排队的 show 永远跑不到，界面要等超时才恢复（Codex 查出的冻结）。
-        """
-        text = ("本机免费试用（%d 次）已用完。\n\n"
-                "正式版激活后：不限次数修正、输出无水印可编辑文档、一键交稿。\n\n"
-                "微信扫下方小程序码即可购买激活码，付款后自动发码，立即可用。"
-                % trial.TRIAL_LIMIT)
-        if threading.current_thread() is threading.main_thread():
-            self._show_purchase_qr("免费试用已用完", text)
-            return
+        """试用次数用完：主线程弹升级引导（公众号引导）。"""
         ev = threading.Event()
+        box = {}
 
         def show():
-            try:
-                self._show_purchase_qr("免费试用已用完", text)
-            finally:
-                ev.set()
+            box["v"] = self._modal(
+                "试用次数已用完",
+                "本机试用已满 %d 次。\n\n"
+                "正式版激活后：不限次数修正、输出无水印文档、一键交稿。\n\n"
+                "获取激活码：请关注公众号【芦苇不熬夜】（ID：reedskill）或联系客服。\n"
+                "激活教程与购买方式详见官网 reedskill.com。\n"
+                "激活码购买与激活问题，公众号留言即可。" % trial.TRIAL_LIMIT,
+                [("ok", "知道了")])
+            ev.set()
 
         self.root.after(0, show)
-        ev.wait(60)
-
-    def _show_purchase_qr(self, title, text):
-        """购买引导窗：展示小程序码（购买主渠道）+「我已购买 · 去激活」入口。
-
-        必须在主线程调用（_show_trial_exhausted 已用 root.after(0) 调度）。
-        小程序码缺失时降级为文字指引，绝不阻断主流程。
-        """
-        res = {"v": None}
-        t = self._theme
-        top = ModalShell(self.root, edition=self.edition, title=title, width=600, height=660)
-        tk.Label(top.body, text=text, bg=t.modal_fill, fg=t.modal_sub,
-                 font=t.sans(TYPE["body"]),
-                 justify="left", wraplength=440).pack(padx=4, pady=(8, 10))
-        shown = False
-        try:
-            if os.path.isfile(MINIAPP_QRCODE):
-                img = tk.PhotoImage(file=MINIAPP_QRCODE)
-                img = img.subsample(max(1, round(img.width() / 150)))
-                lbl = tk.Label(top.body, image=img, bg=t.modal_fill)
-                lbl.image = img          # 防 GC 回收导致图片不显示
-                lbl.pack()
-                tk.Label(top.body, text="微信扫一扫，或搜索【%s】小程序，付款后自动发码"
-                         % MINIAPP_NAME, bg=t.modal_fill, fg=t.muted,
-                         font=t.sans(TYPE["caption"])).pack(pady=(6, 0))
-                shown = True
-        except Exception:
-            shown = False
-        if not shown:
-            tk.Label(top.body, text="（小程序码未随包提供，请前往官网 reedskill.com 购买）",
-                     bg=t.modal_fill, fg=t.muted,
-                     font=t.sans(TYPE["caption"])).pack(pady=(4, 0))
-        fr = tk.Frame(top.body, bg=t.modal_fill)
-        fr.pack(pady=(16, 4))
-        widgets.RoundButton(fr, text="我已购买 · 去激活", edition=self.edition, style="primary",
-                           height=SPACING["btn_h"], font=t.sans(TYPE["btn"], bold=True),
-                           command=lambda: (res.update(v="activate"), top.destroy())).pack(side="left", padx=6)
-        widgets.RoundButton(fr, text="稍后", edition=self.edition, style="secondary",
-                           height=SPACING["btn_h"],
-                           font=t.sans(TYPE["btn_small"], bold=True),
-                           command=top.destroy).pack(side="left", padx=6)
-        top.center_on(self.root)
-        top.wait_window()
-        if res["v"] == "activate":
-            self._open_activation(force=True)
-
-    def _show_upgrade_qr(self):
-        """右上「升级正式版 →」入口：直接弹简单小程序码购买引导（老板拍板：不弹复杂激活窗 / 套餐卡片）。
-        已购用户点「我已购买 · 去激活」仍走 show_activation 完整激活流程，激活能力不丢。
-        """
-        self._show_purchase_qr(
-            "升级正式版",
-            "正式版：不限次数修正、输出无水印可编辑文档、一键交稿。\n\n"
-            "微信扫下方小程序码即可购买激活码，付款后自动发码，立即可用。")
-
-    def _show_service_qr(self):
-        """右上入口「客服微信」：沿用既有购买引导窗（客服微信 / 邮箱 + 小程序码 + 去激活）。"""
-        self._show_purchase_qr(
-            "联系客服",
-            "客服微信：%s（ID：%s）\n邮箱：%s\n\n购买后自动发码；下方小程序码可直接扫码购买。"
-            % (WECHAT_NAME, WECHAT_ID, ABOUT_MAIL))
-
-    def _show_official_qr(self):
-        """右上入口「官方公众号」：展示公众号二维码（复用既有 ModalShell，不另造弹窗样式）。"""
-        t = self._theme
-        top = ModalShell(self.root, edition=self.edition, title="官方公众号",
-                         width=440, height=470)
-        tk.Label(top.body,
-                 text="微信扫码关注公众号【%s】（ID：%s）\n版本更新、使用技巧与激活教程都会发布在这里。"
-                      % (WECHAT_NAME, WECHAT_ID),
-                 bg=t.modal_fill, fg=t.modal_sub, font=t.sans(TYPE["body"]),
-                 justify="left", wraplength=360).pack(padx=4, pady=(8, 10))
-        shown = False
-        try:
-            if os.path.isfile(QRCODE):
-                img = tk.PhotoImage(file=QRCODE)
-                img = img.subsample(max(1, round(img.width() / 150)))
-                lbl = tk.Label(top.body, image=img, bg=t.modal_fill)
-                lbl.image = img          # 防 GC 回收导致图片不显示
-                lbl.pack()
-                shown = True
-        except Exception:
-            shown = False
-        if not shown:
-            tk.Label(top.body, text="（二维码未随包提供，请前往官网 reedskill.com）",
-                     bg=t.modal_fill, fg=t.muted,
-                     font=t.sans(TYPE["caption"])).pack(pady=(6, 0))
-        widgets.RoundButton(top.body, text="关闭", edition=self.edition, style="secondary",
-                            height=SPACING["btn_h"],
-                            font=t.sans(TYPE["btn_small"], bold=True),
-                            command=top.destroy).pack(pady=(18, 0))
-        top.center_on(self.root)
-        top.wait_window()
+        ev.wait(30)
 
     def _on_trial_blocked(self):
         """试用被拦截（用完/取消）：停留在当前步，给友好提示。"""
         self._errored = False
-        # 用户刚在「购买引导」里点「去激活」并激活成功时，worker 仍会返回 False 走到这里；
-        # 此时不能再报「试用已用完」，否则与刚写入的「已激活正式版」自相矛盾（Codex N1）。
-        try:
-            if trial.is_licensed():
-                self._update_trial_badge()
-                self._set_status("已激活正式版，感谢支持", OKC)
-                self._set_bar("idle")
-                self._refresh_wizard()
-                return
-        except Exception:
-            pass
         self._set_status("试用次数已用完，请激活后使用", ERRC)
         self._set_bar("idle")
         self._refresh_wizard()
@@ -2517,22 +2119,22 @@ class App:
 
     def _modal(self, title, text, buttons):
         result = {"v": None}
-        t = self._theme
-        top = ModalShell(self.root, edition=self.edition, title=title, width=620, height=320)
-        tk.Label(top.body, text=text, bg=t.modal_fill, fg=t.modal_sub,
-                 font=t.sans(TYPE["body"]), justify="left", wraplength=520).pack(
-            anchor="w", pady=(6, 24))
-        fr = tk.Frame(top.body, bg=t.modal_fill)
-        fr.pack(fill="x", pady=(0, 6))
+        top = tk.Toplevel(self.root)
+        top.title(title)
+        top.configure(bg=PAPER)
+        top.transient(self.root)
+        top.grab_set()
+        top.geometry("+%d+%d" % (self.root.winfo_rootx() + 140,
+                                 self.root.winfo_rooty() + 120))
+        tk.Label(top, text=text, bg=PAPER, fg=BODY, font=F_BODY, justify="left",
+                 wraplength=480).pack(padx=24, pady=(20, 14))
+        fr = tk.Frame(top, bg=PAPER)
+        fr.pack(pady=(0, 18))
         for key, label in buttons:
-            st = "primary" if key == "ok" else "secondary"
-            b = widgets.RoundButton(fr, text=label, edition=self.edition, style=st,
-                                   height=SPACING["btn_h"],
-                                   font=t.sans(TYPE["btn"] if key == "ok" else TYPE["btn_small"],
-                                               bold=True),
-                                   command=lambda k=key: (result.update(v=k), top.destroy()))
-            b.pack(side="left", padx=(0, 10))
-        top.center_on(self.root)
+            style = "Primary.TButton" if key == "ok" else "TButton"
+            b = ttk.Button(fr, text=label, style=style,
+                           command=lambda k=key: (result.update(v=k), top.destroy()))
+            b.pack(side="left", padx=6)
         top.wait_window()
         return result["v"]
 
@@ -2627,7 +2229,7 @@ class App:
         if p and os.path.isfile(p):
             self.profile_info_var.set("已载入格式画像：" + os.path.basename(p))
             if not self.profile_box.winfo_ismapped():
-                self.profile_box.pack(fill="x", pady=(10, 0), after=self._template_box)
+                self.profile_box.pack(fill="x", padx=14, pady=(4, 8), after=self._template_box)
         else:
             if self.profile_box.winfo_ismapped():
                 self.profile_box.pack_forget()
@@ -2649,7 +2251,7 @@ class App:
         self.thesis_path.set("")
         self.template_path.set("")
         self.profile_path.set("")
-        self._template_name.config(text="用于按学校要求检查／修正，更贴合要求", fg=MUTED)
+        self._template_name.config(text="用于按学校要求检查 / 修正，更贴合要求", fg=MUTED)
         self._thesis_dot.config(text="○", fg=MUTED)
         self._update_thesis_status()
         self._tpl_dot.config(text="○", fg=MUTED)
@@ -2675,7 +2277,7 @@ class App:
                                     self.status_dot.config(fg=color)))
 
     def _update_trial_badge(self):
-        """刷新顶部入口行的试用 / 正式标识（只换渲染对象，触发时机与判定一字未动）。"""
+        """刷新右下角激活/试用标识。"""
         try:
             self._licensed = trial.is_licensed()
         except Exception:
@@ -2686,27 +2288,18 @@ class App:
                 s = license.license_summary()
             except Exception:
                 s = None
-            self._trial_badge.set_kind("formal")
-            # badge 形如「正式版 · 周卡（剩 5 天）」，本身就是完整短文案，不再另加前缀
-            self._trial_badge.set_text(s["badge"] if s else "正式版")
-            self._upgrade_btn.config(text="已激活 ✓", state="disabled")
+            self._trial_btn.config(
+                text=("%s ✓" % s["badge"]) if s else "正式版 ✓", state="disabled")
         else:
-            self._trial_badge.set_kind("trial")
             left = trial.trials_left()
             if left > 0:
-                self._trial_badge.set_text("试用版 · 剩余 %d 次" % left)
+                self._trial_btn.config(text="试用版（剩 %d 次）· 激活" % left, state="normal")
             else:
-                self._trial_badge.set_text("试用版 · 已用完")
-            self._upgrade_btn.config(text="升级正式版 →", state="normal")
+                self._trial_btn.config(text="试用已用完 · 激活", state="normal")
 
-    def _open_activation(self, force: bool = False):
-        """主界面右上角激活入口：打开激活窗，成功后刷新状态。
-
-        ``force=True``：来自「试用用完 → 购买引导」弹窗的「我已购买 · 去激活」。
-        此时 worker 线程仍在跑（`self.running` 要等 _do_fix 返回才清），走 running 守卫
-        会直接弹「正在处理」→ 激活窗永远打不开（Codex 2026-09-12 审查发现的 P1）。
-        """
-        if self.running and not force:
+    def _open_activation(self):
+        """主界面右上角激活入口：打开激活窗，成功后刷新状态。"""
+        if self.running:
             messagebox.showinfo("正在处理", "上一步还在处理中，请稍候…", parent=self.root)
             return
         r = show_activation(self.root, show_trial=False)
@@ -2759,48 +2352,38 @@ def show_activation(root, show_trial=True):
       "quit"   直接关闭窗口（退出程序）。
     """
     result = {"v": "quit"}
-    t = get_theme("advisor")
-    _w, _h = 620, 740
-    top = ModalShell(root, edition="advisor", title="导师版 · 升级正式版",
-                    width=_w, height=_h)
+    top = tk.Toplevel(root)
+    top.title("激活 · 论文格式医生·导师版")
+    top.configure(bg=PAPER)
+    top.resizable(False, False)
+    # v1.3.65：窗口尺寸自适应屏幕（笔记本 768 高屏幕时 720 高的窗口底部会被截在屏外）
+    try:
+        _sw = top.winfo_screenwidth()
+        _sh = top.winfo_screenheight()
+    except Exception:
+        _sw, _sh = 1366, 768
+    _s = _CUR_SCALE
+    _w = max(420, min(int(620 * _s), _sw - 60))
+    # v1.3.66：主界面激活入口无试用区，窗口更矮
+    _base_h = 690 if show_trial else 600
+    _h = max(420, min(int(_base_h * _s), _sh - 120))
+    top.geometry("%dx%d" % (_w, _h))
 
-    tk.Label(top.body, text="论文格式医生", bg=t.modal_fill, fg=t.modal_title,
-             font=t.serif(TYPE["page_title"], bold=True)).pack(pady=(14, 4))
+    tk.Label(top, text="激 活 论 文 格 式 医 生", bg=PAPER, fg=INK,
+             font=F_TITLE).pack(pady=(14, 4))
     # v1.0.23：卡片种类已扩展到 4 种（永久 / 周卡 / 月卡 / 次卡），文案不再统一说"永久、完全离线"
-    tk.Label(top.body,
+    tk.Label(top,
              text="请输入您购买的激活码以激活。\n"
                   "永久卡：激活后完全离线、永久可用；周卡 / 月卡：期限内可用；\n"
                   "次卡：每次修正需联网扣一次次数，离线时不可使用。",
-             bg=t.modal_fill, fg=t.modal_sub, font=t.sans(TYPE["caption"]),
-             wraplength=440, justify="center").pack(pady=(0, 10))
+             bg=PAPER, fg=MUTED, font=F_SMALL, wraplength=440, justify="center").pack(pady=(0, 10))
 
     card_var = tk.StringVar()
-    code_entry = tk.Entry(top.body, textvariable=card_var,
-                          font=t.sans(TYPE["body"]), width=40,
-                          relief="solid", bd=1, highlightthickness=1,
-                          highlightbackground=t.select_border, bg=t.surface,
-                          justify="center")
-    code_entry.pack(pady=(4, 6))
-    # 占位文案照 COPY_TABLE.md 第 5 节：`输入激活码`（tk 没有原生 placeholder，自管两态）
-    card_var.set(widgets.COPY["input_code_ph"])
-    code_entry.configure(fg=t.muted)
-
-    def _code_focus_in(_e=None):
-        if card_var.get() == widgets.COPY["input_code_ph"]:
-            card_var.set("")
-            code_entry.configure(fg=t.modal_title)
-
-    def _code_focus_out(_e=None):
-        if not card_var.get().strip():
-            card_var.set(widgets.COPY["input_code_ph"])
-            code_entry.configure(fg=t.muted)
-
-    code_entry.bind("<FocusIn>", _code_focus_in)
-    code_entry.bind("<FocusOut>", _code_focus_out)
+    tk.Entry(top, textvariable=card_var, width=40, font=F_BODY,
+             relief="solid", bd=1, justify="center").pack(pady=(4, 6))
 
     msg_var = tk.StringVar()
-    tk.Label(top.body, textvariable=msg_var, bg=t.modal_fill, fg=t.error_text,
-             font=t.sans(TYPE["caption"])).pack(pady=(0, 6))
+    tk.Label(top, textvariable=msg_var, bg=PAPER, fg=ERRC, font=F_SMALL).pack(pady=(0, 6))
 
     def do_activate():
         card = card_var.get().strip()
@@ -2854,47 +2437,33 @@ def show_activation(root, show_trial=True):
 
         top.after(300, poll)
 
-    def _clear_code_placeholder():
-        if card_var.get() == widgets.COPY["input_code_ph"]:
-            card_var.set("")
-
-    btn_activate = widgets.RoundButton(top.body, text="激活", edition="advisor", style="primary",
-                                      height=SPACING["btn_h"],
-                                      font=t.sans(TYPE["btn"], bold=True),
-                                      command=lambda: (_clear_code_placeholder(), do_activate()))
+    btn_activate = ttk.Button(top, text="激活", style="Primary.TButton",
+               command=do_activate)
     btn_activate.pack(pady=(2, 4))
 
     # v1.3.58：试用入口放在显眼位置（激活按钮正下方，便于未购买客户先体验）
     # v1.3.66：仅启动时首次弹窗显示；从主界面激活入口打开时客户已在试用模式，无需再显示
     if show_trial:
-        widgets.RoundButton(top.body,
-                           text="还没有激活码？先试用（免费 %d 次）" % trial.TRIAL_LIMIT,
-                           edition="advisor", style="secondary", height=SPACING["btn_h"],
-                           font=t.sans(TYPE["btn_small"], bold=True),
-                           command=lambda: (result.update(v="trial"), top.destroy())).pack(pady=(4, 2))
-        tk.Label(top.body, text="试用版可完整体验一键修正，输出带水印且为只读预览；正式版可编辑无水印。",
-                 bg=t.modal_fill, fg=t.muted, font=t.sans(TYPE["caption"]),
-                 wraplength=540).pack(pady=(0, 6))
+        ttk.Button(top, text="还没有激活码？先试用（免费 2 次）", style="Ghost.TButton",
+                   command=lambda: (result.update(v="trial"), top.destroy())).pack(pady=(4, 2))
+        tk.Label(top, text="试用版可完整体验一键修正，输出带水印且为只读预览；正式版可编辑无水印。",
+                 bg=PAPER, fg=MUTED, font=F_FOOT, wraplength=540).pack(pady=(0, 6))
 
-    tk.Label(top.body, text="— 以下为特殊情形使用 —", bg=t.modal_fill, fg=t.muted,
-             font=t.sans(TYPE["caption"])).pack(pady=(8, 4))
+    tk.Label(top, text="— 以下为特殊情形使用 —", bg=PAPER, fg=MUTED, font=F_SMALL).pack(pady=(8, 4))
     mc = license.get_machine_code()
     # 机器码 + 复制按钮并排一行（省高度）
-    mc_row = tk.Frame(top.body, bg=t.modal_fill)
+    mc_row = tk.Frame(top, bg=PAPER)
     mc_row.pack(pady=(0, 6))
-    tk.Label(mc_row, text="本机机器码：" + mc, bg=t.modal_fill, fg=t.muted,
-             font=t.mono(TYPE["mono"])).pack(side="left")
-    widgets.RoundButton(mc_row, text="复制", edition="advisor", style="secondary",
-                       height=SPACING["btn_h_sm"],
-                       font=t.sans(TYPE["btn_small"], bold=True),
-                       command=lambda: top.clipboard_append(mc)).pack(side="left", padx=(8, 0))
+    tk.Label(mc_row, text="本机机器码：" + mc, bg=PAPER, fg=MUTED,
+             font=F_MONO).pack(side="left")
+    ttk.Button(mc_row, text="复制", style="Ghost.TButton",
+               command=lambda: top.clipboard_append(mc)).pack(side="left", padx=(8, 0))
 
     off_var = tk.StringVar()
-    tk.Label(top.body, text="离线激活码（网络不通时，联系客服获取）：", bg=t.modal_fill, fg=t.muted,
-             font=t.sans(TYPE["caption"])).pack(pady=(2, 2))
-    tk.Entry(top.body, textvariable=off_var, width=46, font=t.mono(TYPE["mono"]),
-             relief="solid", bd=1, highlightthickness=1,
-             highlightbackground=t.select_border, bg=t.surface).pack(pady=(2, 4))
+    tk.Label(top, text="离线激活码（网络不通时，联系客服获取）：", bg=PAPER, fg=MUTED,
+             font=F_SMALL).pack(pady=(2, 2))
+    tk.Entry(top, textvariable=off_var, width=46, font=F_MONO,
+             relief="solid", bd=1).pack(pady=(2, 4))
 
     def do_offline():
         code = off_var.get().strip()
@@ -2909,47 +2478,38 @@ def show_activation(root, show_trial=True):
         else:
             msg_var.set("离线激活码无效，请核对后重试")
 
-    widgets.RoundButton(top.body, text="使用离线激活码激活", edition="advisor", style="secondary",
-                       height=SPACING["btn_h"],
-                       font=t.sans(TYPE["btn_small"], bold=True),
-                       command=do_offline).pack(pady=(2, 4))
+    ttk.Button(top, text="使用离线激活码激活", style="Ghost.TButton",
+               command=do_offline).pack(pady=(2, 4))
 
-    widgets.RoundButton(top.body, text="退出", edition="advisor", style="secondary",
-                       height=SPACING["btn_h"],
-                       font=t.sans(TYPE["btn_small"], bold=True),
-                       command=lambda: top.destroy()).pack(pady=(0, 4))
+    ttk.Button(top, text="退出", command=lambda: top.destroy()).pack(pady=(0, 4))
 
-    hl = tk.Frame(top.body, bg=t.modal_fill)
+    hl = tk.Frame(top, bg=PAPER)
     hl.pack(pady=(4, 2))
-    tk.Button(hl, text="关于", bg=t.modal_fill, fg=t.primary,
-              font=t.sans(TYPE["caption"]),
+    tk.Button(hl, text="关于", bg=PAPER, fg=ACCENT, font=F_SMALL,
               relief="flat", cursor="hand2",
               command=lambda: show_about(top)).pack(side="left", padx=14)
-    tk.Button(hl, text="使用帮助", bg=t.modal_fill, fg=t.primary,
-              font=t.sans(TYPE["caption"]),
+    tk.Button(hl, text="使用帮助", bg=PAPER, fg=ACCENT, font=F_SMALL,
               relief="flat", cursor="hand2",
               command=lambda: show_help(top)).pack(side="left", padx=14)
-    _site_label(hl, bg=t.modal_fill).pack(side="left", padx=14)
+    _site_label(hl).pack(side="left", padx=14)
 
-    tk.Label(top.body, text="未签名程序提示：Windows 可能弹出 SmartScreen 拦截，点击「详细信息」→「仍要运行」即可打开（官网激活教程有图文演示）。",
-             bg=t.modal_fill, fg=t.muted, font=t.sans(TYPE["caption"]),
-             wraplength=560).pack(pady=(2, 6))
-    tk.Label(top.body, text="客服微信 · 官方公众号 · hi@reedskill.com",
-             bg=t.modal_fill, fg=t.muted, font=t.sans(TYPE["footer"]),
-             wraplength=560).pack(pady=(8, 10))
+    tk.Label(top, text="未签名程序提示：Windows 可能弹出 SmartScreen 拦截，点击「详细信息」→「仍要运行」即可打开（官网激活教程有图文演示）。",
+             bg=PAPER, fg=MUTED, font=F_FOOT, wraplength=560).pack(pady=(2, 6))
+    tk.Label(top, text="© 2026 论文格式医生 · 公众号【芦苇不熬夜】 ID：reedskill · 合作联系：hi@reedskill.com",
+             bg=PAPER, fg=MUTED, font=F_FOOT, wraplength=560).pack(pady=(8, 10))
 
-    # v1.3.67：按内容实际所需高度自动伸缩窗口（Tk 自动测量，保证底部版权完整显示不截断）
+    # v1.3.67：按内容实际所需高度自动伸缩窗口（Tk 自动测量，保证底部版权完整显示不截断），
+    # 仅设"不超过屏幕"上限。之前固定 600/690 高在字体缩放/DPI 差异下会截掉底部内容。
     try:
         top.update_idletasks()
-        _req_h = top.inner.winfo_reqheight()
-        _req_w = top.inner.winfo_reqwidth()
-        _sh = top.winfo_screenheight()
-        _sw = top.winfo_screenwidth()
-        top._width = min(max(_req_w + 40, 600), _sw - 60)
-        top._height = min(max(_req_h + 40, 720), _sh - 80)
+        _req_h = top.winfo_reqheight()
+        _req_w = top.winfo_reqwidth()
+        _w2 = min(max(_req_w, _w), _sw - 60)
+        _h2 = min(max(_req_h, _h), _sh - 120)
+        top.geometry("%dx%d" % (_w2, _h2))
     except Exception:
         pass
-    top.center_on(root)
+
     top.wait_window()
     return result["v"]
 
@@ -3052,10 +2612,10 @@ def show_about(parent):
         tk.Frame(inner, bg=LINE, height=1).pack(fill="x", padx=padx, pady=pady)
 
     # —— 头部：题名 + 版本 ——
-    tk.Label(inner, text="论文格式医生", bg=PAPER, fg=INK,
+    tk.Label(inner, text="论 文 格 式 医 生", bg=PAPER, fg=INK,
              font=F_TITLE).pack(padx=padx, pady=(24, 2))
     tk.Label(inner, text="版本 v%s" % APP_VERSION, bg=PAPER, fg=MUTED,
-             font=F_SUB).pack(padx=padx, pady=(0, 12))
+             font=F_SUBTITLE).pack(padx=padx, pady=(0, 12))
     rule()
 
     # —— 定位 ——
@@ -3065,7 +2625,7 @@ def show_about(parent):
     rule()
 
     # —— 品牌 + 关注 ——
-    wlbl("芦苇不熬夜 出品", INK, F_HDR, (2, 8), nowrap=True)
+    wlbl("芦 苇 不 熬 夜  出 品", INK, F_HDR, (2, 8), nowrap=True)
     try:
         if os.path.isfile(QRCODE):
             qr = tk.PhotoImage(file=QRCODE)
@@ -3119,7 +2679,7 @@ def show_help(parent):
         return lbl
 
     # —— 头部（居中）——
-    tk.Label(inner, text="使用帮助", bg=PAPER, fg=INK,
+    tk.Label(inner, text="使 用 帮 助", bg=PAPER, fg=INK,
              font=F_TITLE).pack(padx=padx, pady=(22, 4))
     tk.Label(inner, text="将学校模板告知软件，导入论文后依向导循序而行，格式自可妥帖。",
              bg=PAPER, fg=BODY, font=F_BODY, justify="center").pack(padx=padx, pady=(0, 12))
@@ -3131,9 +2691,9 @@ def show_help(parent):
         tk.Frame(inner, bg=LINE, height=1).pack(fill="x", padx=padx, pady=(0, 4))
 
     def item(title, body):
-        tl = albl(title, INK, _ADV.serif(TYPE["card_title"], bold=True))
+        tl = albl(title, INK, ("KaiTi", 12, "bold"))
         tl.pack(fill="x", padx=padx, pady=(8, 1))
-        bl = albl(body, BODY, F_BODY)
+        bl = albl(body, BODY, F_SUBTITLE)
         bl.pack(fill="x", padx=padx, pady=(0, 4))
 
     # —— 一、怎么用 ——
@@ -3142,8 +2702,8 @@ def show_help(parent):
         ("1. 导入论文",
          "在主界面「文件选择」中导入待处理的论文（.docx / .doc / .wps）。"
          "有两个按钮：\n"
-         "·「选择多个文件」：逐个或按住 Ctrl 多选文件；\n"
-         "·「选择文件夹」：若学生论文都放在同一个文件夹里，点它即可自动收齐该文件夹内的所有 Word 文档，无需一篇篇选。\n"
+         "·「选择论文…」：逐个或按住 Ctrl 多选文件；\n"
+         "·「选择文件夹…」：若学生论文都放在同一个文件夹里，点它即可自动收齐该文件夹内的所有 Word 文档，无需一篇篇选。\n"
          "下方会实时显示「已选择 N 篇论文」。导入后软件进入向导模式，引领你完成后续各步。"),
         ("2. 导入学校模板",
          "仍在「文件选择」处，选择学校下发的格式要求文件（Word 模板或格式规范文档均可）。"
@@ -3170,7 +2730,7 @@ def show_help(parent):
          "非必带，但带批注的学校官方模板效果最佳。软件定格式时，批注说明优先于样式定义："
          "批注有明确要求则遵批注，无批注则读样式定义，样式亦无则以通用规范兜底。"),
         ("Q3 · 试用版与正式版有何区别？卡片有哪些种类？",
-         ("试用版：免费试用 %d 次，输出带水印的只读预览（不可直接编辑）。\n" % trial.TRIAL_LIMIT) +
+         "试用版：免费试用 2 次，输出带水印的只读预览（不可直接编辑）。\n"
          "正式版：无水印、可编辑、可保存。卡片共 4 种：\n"
          "· 永久卡 — 一次付费终身可用，激活后完全离线；\n"
          "· 周卡 / 月卡 — 期限内不限次数使用，到期后续费即可继续；\n"
@@ -3182,17 +2742,16 @@ def show_help(parent):
          "· 永久卡 — 激活后完全离线，无需再联网；\n"
          "· 周卡 / 月卡 — 激活后离线可用，到期前会联网校验一次；\n"
          "· 次卡 — 每次修正需联网扣一次次数，离线时暂不可用。"),
-         ("Q6 · 论文安全吗？会上传吗？",
-          "请放心。所有修正均在本机完成，论文不联网、不上传任何服务器，亦不收集论文内容。\n"
-          "联网仅用于「激活校验」与「首次试用登记」，且只传输激活码 / 机器码，绝不含论文内容。\n"
-          "永久卡 / 周卡 / 月卡激活后可断网使用；次卡仅在扣减次数时联网。"),
+        ("Q6 · 论文安全吗？会上传吗？",
+         "请放心。所有修正均在本机完成，论文不联网、不上传任何服务器，亦不收集论文内容。\n"
+         "永久卡 / 周卡 / 月卡激活后可断网使用；次卡仅在扣减次数时联网，且只传输激活码与机器码，不含论文内容。"),
         ("Q7 · 学校模板特殊，或修正结果不尽如人意？",
          "欢迎关注公众号【%s】留言，告知贵校情况，我们协助处理。" % WECHAT_NAME),
         ("Q8 · 打开软件时 Windows 弹出“已保护你的电脑 / 已拦截”提示？",
          "本软件为未签名程序（省去每年数百元代码签名证书费用，让价格更亲民），Windows SmartScreen 会拦截提示，属正常现象，不代表软件有害。\n"
          "处理方式：在拦截框点击【详细信息】→ 再点击【仍要运行】即可正常打开；官网 reedskill.com 的“激活教程”页有图文演示。"),
         ("Q9 · 学生论文很多，一篇篇选太麻烦？",
-          "用「选择文件夹」按钮：把学生论文统一放进一个文件夹，点此按钮，"
+         "用「选择文件夹…」按钮：把学生论文统一放进一个文件夹，点此按钮，"
          "软件会自动收齐其中的全部 Word 文档（.docx / .doc / .wps），"
          "下方即时显示「已选择 N 篇论文」，随后可批量处理。\n"
          "注意：只扫描该文件夹内的文件，不会翻入其子文件夹，以免误选不相关的文档。"),
@@ -3209,7 +2768,7 @@ def show_help(parent):
                "· 公众号设关键词自动回复（试用 / 激活 / 水印 / 报错），常见问题即时应答\n"
                "· 较复杂的问题，由人工回复\n"
                "· 联系邮箱：%s") % (MINIAPP_NAME, WECHAT_NAME, WECHAT_ID, ABOUT_MAIL),
-              BODY, F_BODY)
+              BODY, F_SUBTITLE)
     cl.pack(fill="x", padx=padx, pady=(8, 0))
 
     # 小程序码（购买主渠道）：图片缺失时自动跳过，不影响其余内容显示
