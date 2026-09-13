@@ -2041,6 +2041,20 @@ class App:
                 report = engine.run_fix_headings(
                     docx_path, odst, profile_path=profile,
                     report_docx=rep, add_comments=True, author=author, xlsx_path=xlsx)
+                # 参考文献 GB/T 7714 重排（与学生的"参考文献+报告优化"范围对齐）：
+                # 在标题/正文修正之后独立 pass 执行；失败不影响主交付物（已修正论文 odst）。
+                try:
+                    _ref_out = os.path.splitext(odst)[0] + "_ref.docx"
+                    engine.run_reformat_refs(odst, _ref_out)
+                    if os.path.isfile(_ref_out):
+                        try:
+                            os.replace(_ref_out, odst)
+                        except Exception:
+                            if os.path.isfile(_ref_out):
+                                os.remove(_ref_out)
+                        report = (report or "") + "\n\n> 参考文献已按 GB/T 7714 自动重排。"
+                except Exception as e:
+                    self._debug("[参考文献重排跳过] " + str(e))
             if not licensed:
                 # 试用版：给产出文档加水印+只读保护，并让客户知道正式版可编辑无水印
                 if watermark.apply_watermark(odst):
@@ -2122,6 +2136,18 @@ class App:
                                 engine.run_fix_headings(docx_path, dst, profile_path=profile,
                                                         report_docx=rep, add_comments=True,
                                                         author=author, xlsx_path=xlsx)
+                                # 参考文献 GB/T 7714 重排（与单篇「一键修正」对齐）
+                                try:
+                                    _ref_out = os.path.splitext(dst)[0] + "_ref.docx"
+                                    engine.run_reformat_refs(dst, _ref_out)
+                                    if os.path.isfile(_ref_out):
+                                        try:
+                                            os.replace(_ref_out, dst)
+                                        except Exception:
+                                            if os.path.isfile(_ref_out):
+                                                os.remove(_ref_out)
+                                except Exception as e:
+                                    self._debug("[批量参考文献重排跳过] " + str(e))
                                 try:
                                     cr = engine.run_check(dst, profile_path=profile)
                                     engine.md_to_docx(cr, chk)
