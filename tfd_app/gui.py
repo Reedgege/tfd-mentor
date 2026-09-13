@@ -117,7 +117,7 @@ _FONT_BASE = {
     "F_DIALOG_TITLE": ("KaiTi", TYPE["section_title"], "bold"), # 弹窗标题（楷体）
     "F_ICON":       ("KaiTi", TYPE["seal"], "bold"),            # 印章图标（论 / 模，楷体朱砂）
 }
-APP_VERSION = "1.1.4"
+from .buildinfo import APP_VERSION   # 版本号唯一来源（与 VERSION 文件的一致性由 tests 钉住）
 
 # v1.0.31：绿色 zip 版由软件自建桌面快捷方式（win32com 已内置，客户零依赖、零黑框）。
 APP_SHORTCUT_NAME = "论文格式医生·导师版"   # 桌面快捷方式显示名

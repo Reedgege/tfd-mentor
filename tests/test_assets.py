@@ -58,6 +58,24 @@ else:
     check(os.path.isfile(wm_mod._BG_IMG_SRC),
           "watermark 背景水印图 -> %s" % wm_mod._BG_IMG_SRC)
 
+print("=== 5. 版本号一致性（VERSION 文件 / buildinfo / gui.APP_VERSION）===")
+import re as _re                                          # noqa: E402
+from tfd_app import buildinfo                             # noqa: E402
+ver_file = open(os.path.join(ROOT, "VERSION"), encoding="utf-8").read().strip()
+check(ver_file.lstrip("vV") == buildinfo.APP_VERSION,
+      "VERSION 文件(%s) 与 buildinfo.APP_VERSION(%s) 一致" % (ver_file, buildinfo.APP_VERSION))
+_screen = open(os.path.join(ROOT, "tfd_app", "ui2", "screen.py"), encoding="utf-8").read()
+_lit = _re.findall(r"v1\.[0-9]+\.[0-9]+", _screen)
+check(not _lit, "ui2/screen.py 里没有写死的版本号（找到：%s）" % (_lit or "无"))
+try:
+    from tfd_app import gui as _gui_v                       # noqa: E402
+except ImportError:                                          # pragma: no cover
+    print("  skip 本机无 tkinter，跳过 gui.APP_VERSION 比对")
+else:
+    check(_gui_v.APP_VERSION == buildinfo.APP_VERSION,
+          "gui.APP_VERSION(%s) 与 buildinfo.APP_VERSION(%s) 一致"
+          % (_gui_v.APP_VERSION, buildinfo.APP_VERSION))
+
 print()
 if fails:
     print("==== 资源回归失败 %d 项 ====" % len(fails))
