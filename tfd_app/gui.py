@@ -106,7 +106,7 @@ _FONT_BASE = {
     "F_DIALOG_TITLE": ("KaiTi", 14, "bold"),    # 弹窗标题（楷体）
     "F_ICON":       ("KaiTi", 12, "bold"),      # 印章图标（论 / 模，楷体朱砂）
 }
-APP_VERSION = "1.1.6"
+APP_VERSION = "1.1.7"
 
 # v1.0.31：绿色 zip 版由软件自建桌面快捷方式（win32com 已内置，客户零依赖、零黑框）。
 APP_SHORTCUT_NAME = "论文格式医生·导师版"   # 桌面快捷方式显示名
@@ -686,20 +686,21 @@ class App:
             card, "模", "学校模板", "可选", MUTED,
             "用于按学校要求检查 / 修正，更贴合要求", "选择…", self._pick_template)
 
-        # 记住模板：嵌入「学校模板」框内（不再独立占一行），点一下即保存路径到本机，
-        # 下次打开自动载入，免重复导入；按钮变绿=已记住，再点取消。
+        # 记住模板：嵌入「学校模板」框内，做成低调小文字按钮（不抢主操作）。
+        # 点一下即保存路径到本机，下次打开自动载入；绿字=已记住，再点取消。
         self._tpl_locked = False
-        _lock_frame = tk.Frame(self._template_box, bg="#fff8ec",
-                               highlightthickness=1, highlightbackground="#e9dfc8")
-        _lock_frame.pack(fill="x", padx=10, pady=(0, 8))
+        _lock_frame = tk.Frame(self._template_box, bg="#fff8ec")
+        _lock_frame.pack(fill="x", padx=10, pady=(0, 6))
         self._lock_btn = tk.Button(
-            _lock_frame, text="记住此模板", relief="flat", font=F_BODY,
-            bg="#e3a93b", fg="#5a3d12", activebackground="#f0bf5e", activeforeground="#5a3d12",
-            padx=12, pady=5, cursor="hand2", command=self._on_lock_click)
-        self._lock_btn.pack(side="left", padx=10, pady=6)
+            _lock_frame, text="记住此模板", relief="flat", borderwidth=0,
+            font=F_SMALL,
+            bg="#fff8ec", fg="#8a6d34",
+            activebackground="#f0e7d2", activeforeground="#6f5526",
+            padx=6, pady=1, cursor="hand2", command=self._on_lock_click)
+        self._lock_btn.pack(side="left", padx=10, pady=2)
         self._lock_tip = tk.Label(_lock_frame, text="", bg="#fff8ec",
-                                  fg="#2f7d32", font=F_SMALL_B)
-        self._lock_tip.pack(side="left", padx=(2, 10), pady=6)
+                                  fg="#2f7d32", font=F_SMALL)
+        self._lock_tip.pack(side="left", padx=(2, 10), pady=2)
 
         # 批注署名：导师名，出现在 Word 批注气泡作者栏（默认"论文格式医生·导师版"）
         _auth_row = tk.Frame(card, bg=PANEL)
@@ -1372,14 +1373,14 @@ class App:
                     # 确认后才开始检查；保存报告放到检查完成后由主线程弹框（_save_check_report）。
                     confirmed = self._confirm_profile_if_needed()
                     if confirmed is None:
-                        self.profile_path.set("")   # 客户放弃使用画像 → 按通用规范检查
+                        self._run_on_main(self.profile_path.set, "")   # 客户放弃使用画像 → 按通用规范检查
                     report = self._do_check(src, docx_path)
                     self.root.after(0, lambda: self._save_check_report(report, idx))
                 elif mode == "fix":
                     # 修正前同样先确认/修改画像（第一次进修正时）
                     confirmed = self._confirm_profile_if_needed()
                     if confirmed is None:
-                        self.profile_path.set("")
+                        self._run_on_main(self.profile_path.set, "")
                     # 试用门禁只校验一次（两种都要时也只扣一次）
                     if not self._trial_ok():
                         self.root.after(0, self._on_trial_blocked)
@@ -1412,6 +1413,31 @@ class App:
                 self._refresh_wizard()
         self.root.after(0, _apply)
 
+    def _run_on_main(self, fn, *a, **k):
+        """在 Tk 主线程同步执行 fn 并返回结果（供 worker 线程安全改 UI / 弹窗）。
+
+        worker 线程直接碰 Tk 变量/控件会抛 RuntimeError: main thread is not in main loop，
+        且会被 _worker 的 except 捕获后导致步骤卡死（step_index 不前进、弹窗也出不来）。
+        这里统一把 Tk 写操作派回主线程：已在主线程则直接执行；否则用 after(0,...) 派发并阻塞等待完成。
+        """
+        if threading.current_thread() is threading.main_thread():
+            return fn(*a, **k)
+        box = {}
+        ev = threading.Event()
+
+        def _do():
+            try:
+                box["r"] = fn(*a, **k)
+            except Exception as e:  # 把异常带回调用线程，便于上层感知
+                box["e"] = e
+            finally:
+                ev.set()
+        self.root.after(0, _do)
+        ev.wait()
+        if "e" in box:
+            raise box["e"]
+        return box.get("r")
+
     # --------------------------------------------------- profile 提取与确认
     def _extract_profile(self, src):
         """提取学校模板要求并弹确认页（客户可修改）。返回画像路径或 None（放弃）。"""
@@ -1428,11 +1454,13 @@ class App:
         except Exception:
             profile = None
         if profile is None:
-            self.profile_path.set("")
+            self._run_on_main(self.profile_path.set, "")
             return None
         # 提取成功先不弹确认页：确认页挪到「检查/修正」步骤执行前统一弹出，
         # 客户在真正处理前核对/修改（修改会写回画像并生效）。
-        self.profile_path.set(out)
+        # v1.1.7：profile_path 是 Tk StringVar，必须从主线程写；worker 线程直写会抛
+        # "main thread is not in main loop"，被 _worker 吞掉后卡在第①步。统一派回主线程。
+        self._run_on_main(self.profile_path.set, out)
         self._profile_confirmed = False
         self._profile_abandoned = False   # 新画像就绪：清除"放弃"标记
         self.root.after(0, self._update_profile_box)
@@ -1687,7 +1715,8 @@ class App:
                 self._debug("学校模板要求提取失败（模板可能无样式/批注）")
         else:
             # 未选模板：无学校要求可提取，按通用规范处理，标记已确认避免后续弹空框
-            self.profile_path.set("")
+            # v1.1.7：profile_path 是 Tk StringVar，必须从主线程写（_do_profile 在 worker 线程调用）
+            self._run_on_main(self.profile_path.set, "")
             self._profile_confirmed = True
             self.root.after(0, lambda: messagebox.showinfo(
                 "无需提取学校要求",
