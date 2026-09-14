@@ -106,7 +106,7 @@ _FONT_BASE = {
     "F_DIALOG_TITLE": ("KaiTi", 14, "bold"),    # 弹窗标题（楷体）
     "F_ICON":       ("KaiTi", 12, "bold"),      # 印章图标（论 / 模，楷体朱砂）
 }
-APP_VERSION = "1.1.5"
+APP_VERSION = "1.1.6"
 
 # v1.0.31：绿色 zip 版由软件自建桌面快捷方式（win32com 已内置，客户零依赖、零黑框）。
 APP_SHORTCUT_NAME = "论文格式医生·导师版"   # 桌面快捷方式显示名
@@ -686,17 +686,18 @@ class App:
             card, "模", "学校模板", "可选", MUTED,
             "用于按学校要求检查 / 修正，更贴合要求", "选择…", self._pick_template)
 
-        # 🔒 记住模板（显眼高亮框 + 小按钮）：点一下"记住此模板"即保存路径到本机，
+        # 记住模板：嵌入「学校模板」框内（不再独立占一行），点一下即保存路径到本机，
         # 下次打开自动载入，免重复导入；按钮变绿=已记住，再点取消。
         self._tpl_locked = False
-        _lock_frame = tk.Frame(card, bg="#fff3df", highlightthickness=1, highlightbackground="#e3a93b")
-        _lock_frame.pack(fill="x", padx=14, pady=(2, 6))
+        _lock_frame = tk.Frame(self._template_box, bg="#fff8ec",
+                               highlightthickness=1, highlightbackground="#e9dfc8")
+        _lock_frame.pack(fill="x", padx=10, pady=(0, 8))
         self._lock_btn = tk.Button(
-            _lock_frame, text="🔒 记住此模板", relief="flat", font=F_BODY,
+            _lock_frame, text="记住此模板", relief="flat", font=F_BODY,
             bg="#e3a93b", fg="#5a3d12", activebackground="#f0bf5e", activeforeground="#5a3d12",
             padx=12, pady=5, cursor="hand2", command=self._on_lock_click)
         self._lock_btn.pack(side="left", padx=10, pady=6)
-        self._lock_tip = tk.Label(_lock_frame, text="", bg="#fff3df",
+        self._lock_tip = tk.Label(_lock_frame, text="", bg="#fff8ec",
                                   fg="#2f7d32", font=F_SMALL_B)
         self._lock_tip.pack(side="left", padx=(2, 10), pady=6)
 
@@ -770,7 +771,7 @@ class App:
                                     highlightthickness=1, highlightbackground="#b7c6ae")
         tk.Label(self.profile_box, text="●", bg="#f0f3ec", fg=OKC,
                  font=F_FOOT).pack(side="left", padx=(10, 4), pady=6)
-        self.profile_info_var = tk.StringVar(value="已载入格式画像")
+        self.profile_info_var = tk.StringVar(value="已载入模板格式")
         tk.Label(self.profile_box, textvariable=self.profile_info_var, bg="#f0f3ec",
                  fg="#4c5f49", font=F_FOOT).pack(side="left", fill="x", expand=True)
         ttk.Button(self.profile_box, text="清除", width=6, style="Ghost.TButton",
@@ -994,7 +995,9 @@ class App:
                                       state="disabled" if (self.running or self.step_index == 0) else "normal",
                                       command=self._go_prev)
             elif _phase == "fixed":
-                self._next_btn.config(text="保存结果", command=self._export_fix,
+                # 批量修正完成 → 让客户选保存位置后导出；单篇走 _export_fix
+                _export_cmd = self._export_batch_fix if len(self.thesis_paths) > 1 else self._export_fix
+                self._next_btn.config(text="保存结果", command=_export_cmd,
                                       state="disabled" if self.running else "normal")
                 self._prev_btn.config(text="上一步", state="normal", command=self._go_prev)
             else:  # saved（防御分支：正常已归入 _exported）
@@ -1002,7 +1005,15 @@ class App:
                 self._prev_btn.config(text="再处理一篇", state="normal",
                                       command=self._reset_wizard)
         else:
-            self._next_btn.config(text="下一步", command=self._run_step,
+            # 第①/②步按钮文案随步骤精细变化（不再一律“下一步”）
+            if self.step_index == 0:
+                _next = ("① 提取模板要求" if self.template_path.get().strip()
+                         else "① 按通用规范继续")
+            elif self.step_index == 1:
+                _next = "② 开始检查"
+            else:
+                _next = "下一步"
+            self._next_btn.config(text=_next, command=self._run_step,
                                   state="disabled" if self.running else "normal")
             self._prev_btn.config(text="上一步",
                                   state="disabled" if (self.running or self.step_index == 0) else "normal",
@@ -1168,7 +1179,7 @@ class App:
             self._lock_btn.config(text="✓ 已记住（点此取消）", bg="#2f7d32", fg="white",
                                   activebackground="#3c9a40", activeforeground="white")
         else:
-            self._lock_btn.config(text="🔒 记住此模板", bg="#e3a93b", fg="#5a3d12",
+            self._lock_btn.config(text="记住此模板", bg="#e3a93b", fg="#5a3d12",
                                   activebackground="#f0bf5e", activeforeground="#5a3d12")
 
     def _flash_lock(self, msg):
@@ -1296,20 +1307,17 @@ class App:
             messagebox.showerror("缺少输入", "请先选择“待处理论文”（可多选批量导入）。")
             return
 
-        # 批量（≥2 篇）：检查 / 修正都走批量。先让客户选输出文件夹，再线程批量处理（避免逐个弹保存框）。
+        # 批量（≥2 篇）：检查 / 修正都走批量。v1.x：统一改为「先处理、后导出」——
+        # 产出先落本机临时目录，处理完成后再让客户选保存位置（不再一进第③步就先弹“选择批量输出文件夹”）。
         # v1.0.14：修正此前"仅 fix 模式批量、check 模式选多篇只处理首篇"导致只输出一篇报告的 bug。
         if len(self.thesis_paths) > 1:
-            out_dir = filedialog.askdirectory(
-                title="选择批量输出文件夹（%s报告将保存在此）"
-                       % ("检查" if mode == "check" else "处理结果"))
-            if not out_dir:
-                return
+            batch_tmp = tempfile.mkdtemp(prefix="tfd_batch_")
             self._errored = False
             self.running = True
             self._set_running(True)
             self._set_status("正在批量处理 %d 篇论文…" % len(self.thesis_paths), RUN)
             self._set_bar("running", "批量处理")
-            threading.Thread(target=self._batch_worker, args=(idx, mode, out_dir),
+            threading.Thread(target=self._batch_worker, args=(idx, mode, batch_tmp),
                              daemon=True).start()
             return
 
@@ -1915,21 +1923,83 @@ class App:
             self.root.after(0, lambda: self._set_running(False))
 
     def _on_batch_done(self, idx, mode, out_dir, n):
+        # 批量统一「先处理、后导出」：处理完（结果在临时目录 out_dir）再让客户选保存位置。
+        self._batch_tmp = out_dir
+        self._batch_done_n = n
+        self._batch_idx = idx
         if mode == "check":
-            # 检查模式批量完成：检查步骤（idx=1）已结束，推进到下一步（修正/交付方式）。
-            self.step_index = idx + 1
-            self._set_status("批量检查完成，已保存 %d 篇检查报告" % n, OKC)
-            self._set_bar("done")
-            self._refresh_wizard()
-            self._show_batch_check_done(out_dir, n)
+            # 检查模式批量：处理完弹窗让客户选保存文件夹，把临时产出整体导出后推进到下一步。
+            self._prompt_batch_export("check")
         else:
-            # 批量修正完成：记录当前交付方式已导出（输出文件夹），切回该方式时按钮显示「已完成」
-            self._fix_phase[self._fix_mode] = "saved"
-            self._exported[self._fix_mode] = {out_dir}
-            self._set_status("批量处理完成，已保存至文件夹", OKC)
+            # 修正模式批量：进入「保存结果」子状态，由 _export_batch_fix 让客户选位置后导出
+            # （与单篇修正一致：先修正、后导出；不提前弹文件夹）。
+            self._fix_phase[self._fix_mode] = "fixed"
+            self._set_status("批量修正完成，请点击「保存结果」", OKC)
             self._set_bar("done")
             self._refresh_wizard()
-            self._show_batch_done(out_dir, n)
+
+    def _move_dir_contents(self, src, dst):
+        """把 src 目录下的全部文件移动到 dst（跨盘自动复制后删除源）。"""
+        os.makedirs(dst, exist_ok=True)
+        for name in os.listdir(src):
+            s = os.path.join(src, name)
+            if os.path.isfile(s):
+                shutil.move(s, os.path.join(dst, name))
+
+    def _prompt_batch_export(self, mode):
+        """批量检查完成后：弹窗选保存文件夹，把临时产出整体移动到该文件夹，再推进步骤。"""
+        out_dir = getattr(self, "_batch_tmp", None)
+        if not out_dir or not os.path.isdir(out_dir):
+            messagebox.showerror("导出失败", "批量结果临时目录丢失，请点「上一步」重新处理。")
+            return
+        dst = filedialog.askdirectory(
+            title="选择批量%s保存文件夹" % ("检查报告" if mode == "check" else "处理结果"))
+        if not dst:
+            messagebox.showinfo("未导出",
+                                "未选择保存位置，本次结果暂存在临时文件夹：\n%s\n\n"
+                                "如需导出，请点「下一步」重新处理并选择保存位置。" % out_dir)
+            return
+        try:
+            self._move_dir_contents(out_dir, dst)
+        except Exception as e:
+            messagebox.showerror("导出失败", str(e) + HELP_HINT)
+            return
+        shutil.rmtree(out_dir, ignore_errors=True)
+        if mode == "check":
+            self.step_index = self._batch_idx + 1
+            self._set_status("批量检查完成，已保存 %d 篇检查报告" % self._batch_done_n, OKC)
+            self._set_bar("done")
+            self._refresh_wizard()
+            self._show_batch_check_done(dst, self._batch_done_n)
+
+    def _export_batch_fix(self):
+        """主线程：批量修正完成后让客户选保存位置并导出（先修正、后导出）。"""
+        out_dir = getattr(self, "_batch_tmp", None)
+        if not out_dir or not os.path.isdir(out_dir):
+            messagebox.showerror("导出失败", "批量结果临时目录丢失，请点「上一步」重新处理。")
+            return
+        dst = filedialog.askdirectory(title="选择批量处理结果保存文件夹")
+        if not dst:
+            messagebox.showinfo("未导出",
+                                "未选择保存位置，本次结果暂存在临时文件夹：\n%s\n\n"
+                                "如需导出，请点「保存结果」重新选择保存位置。" % out_dir)
+            return
+        try:
+            self._move_dir_contents(out_dir, dst)
+        except Exception as e:
+            messagebox.showerror("导出失败", str(e) + HELP_HINT)
+            return
+        shutil.rmtree(out_dir, ignore_errors=True)
+        self._finish_batch_export(dst)
+
+    def _finish_batch_export(self, dst):
+        """收尾：记录已保存、进入“完成”态并弹完成提示（与单篇 _finish_export 对应）。"""
+        self._fix_phase[self._fix_mode] = "saved"
+        self._exported[self._fix_mode] = {dst}
+        self._set_status("批量处理完成，已保存至文件夹", OKC)
+        self._set_bar("done")
+        self._refresh_wizard()
+        self._show_batch_done(dst, self._batch_done_n)
 
     def _show_batch_check_done(self, out_dir, n):
         msg = ("已批量检查 %d 篇论文，每篇的格式检查报告（_格式检查报告.docx）已保存在：\n%s\n\n"
@@ -2227,7 +2297,7 @@ class App:
     def _update_profile_box(self):
         p = self.profile_path.get().strip()
         if p and os.path.isfile(p):
-            self.profile_info_var.set("已载入格式画像：" + os.path.basename(p))
+            self.profile_info_var.set("已载入模板格式")
             if not self.profile_box.winfo_ismapped():
                 self.profile_box.pack(fill="x", padx=14, pady=(4, 8), after=self._template_box)
         else:
