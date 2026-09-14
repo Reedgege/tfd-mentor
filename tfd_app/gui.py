@@ -106,7 +106,7 @@ _FONT_BASE = {
     "F_DIALOG_TITLE": ("KaiTi", 14, "bold"),    # 弹窗标题（楷体）
     "F_ICON":       ("KaiTi", 12, "bold"),      # 印章图标（论 / 模，楷体朱砂）
 }
-APP_VERSION = "1.1.8"
+APP_VERSION = "1.1.9"
 
 # v1.0.31：绿色 zip 版由软件自建桌面快捷方式（win32com 已内置，客户零依赖、零黑框）。
 APP_SHORTCUT_NAME = "论文格式医生·导师版"   # 桌面快捷方式显示名
@@ -499,6 +499,7 @@ class App:
                           "生成格式检查报告，不动文件",
                           "可三选一：只批注不改原稿、一键修正、或 ①+② 都要"]
         self.step_index = 0
+        self._all_done = False   # 终态标记：全部交付完成（客户已保存结果），用于锁定时间线 + 显示「再处理一篇」
 
         self._build_style()
         self._build_widgets()
@@ -950,6 +951,12 @@ class App:
             circ = self._step_circle[i]
             title = self._step_title[i]
             line = self._step_line[i]
+            if self._all_done:
+                # 全部交付完成：三步统一灰显锁定，表示已交付、不再可回退到 ①/② 步
+                circ.config(bg="#f0ece3", fg="#b3a890", highlightbackground="#d8d0bf", text="✔")
+                title.config(fg="#b3a890")
+                if line: line.config(bg="#d8d0bf")
+                continue
             # 第三步（最后一步）当前交付方式已生成/已导出也视为完成态
             is_done = i < self.step_index or (
                 i == n - 1 and _cur_done)
@@ -976,35 +983,41 @@ class App:
             self._next_btn.config(text="再处理一篇", command=self._reset_wizard, state="normal")
             self._prev_btn.config(text="上一步", state="disabled", command=self._go_prev)
         elif self.step_index == n - 1:
-            # 第三步：依交付模式（批注副本 / 一键修正）显示按钮（由该模式的 _fix_phase 驱动）
-            _fix_label = {"annotate": "生成批注副本",
-                          "fix": "一键修正",
-                          "both": "生成批注副本 + 已修正版"}[self._fix_mode]
-            _phase = self._fix_phase.get(self._fix_mode, "idle")
-            if self._fix_mode in self._exported:
-                # v1.0.15：该交付方式已导出过 → 按钮显示「已完成」，点击提示已导出过，
-                # 确认后可重新生成覆盖；不再静默可点、也不一刀切置灰（用户可随时切其他方式）。
-                self._next_btn.config(text="已完成", command=self._re_export_prompt,
+            if self._all_done:
+                # 已交付完成：主按钮「再处理一篇」重新开始；禁用上一步，避免回退到 ①/② 步产生脏状态
+                self._next_btn.config(text="再处理一篇", command=self._reset_wizard,
                                       state="disabled" if self.running else "normal")
-                self._prev_btn.config(text="上一步",
-                                      state="disabled" if self.running else "normal",
-                                      command=self._go_prev)
-            elif _phase == "idle":
-                self._next_btn.config(text=_fix_label, command=self._run_step,
-                                      state="disabled" if self.running else "normal")
-                self._prev_btn.config(text="上一步",
-                                      state="disabled" if (self.running or self.step_index == 0) else "normal",
-                                      command=self._go_prev)
-            elif _phase == "fixed":
-                # 批量修正完成 → 让客户选保存位置后导出；单篇走 _export_fix
-                _export_cmd = self._export_batch_fix if len(self.thesis_paths) > 1 else self._export_fix
-                self._next_btn.config(text="保存结果", command=_export_cmd,
-                                      state="disabled" if self.running else "normal")
-                self._prev_btn.config(text="上一步", state="normal", command=self._go_prev)
-            else:  # saved（防御分支：正常已归入 _exported）
-                self._next_btn.config(text="完成", state="disabled")
-                self._prev_btn.config(text="再处理一篇", state="normal",
-                                      command=self._reset_wizard)
+                self._prev_btn.config(text="上一步", state="disabled", command=self._go_prev)
+            else:
+                # 第三步：依交付模式（批注副本 / 一键修正）显示按钮（由该模式的 _fix_phase 驱动）
+                _fix_label = {"annotate": "生成批注副本",
+                              "fix": "一键修正",
+                              "both": "生成批注副本 + 已修正版"}[self._fix_mode]
+                _phase = self._fix_phase.get(self._fix_mode, "idle")
+                if self._fix_mode in self._exported:
+                    # v1.0.15：该交付方式已导出过 → 按钮显示「已完成」，点击提示已导出过，
+                    # 确认后可重新生成覆盖；不再静默可点、也不一刀切置灰（用户可随时切其他方式）。
+                    self._next_btn.config(text="已完成", command=self._re_export_prompt,
+                                          state="disabled" if self.running else "normal")
+                    self._prev_btn.config(text="上一步",
+                                          state="disabled" if self.running else "normal",
+                                          command=self._go_prev)
+                elif _phase == "idle":
+                    self._next_btn.config(text=_fix_label, command=self._run_step,
+                                          state="disabled" if self.running else "normal")
+                    self._prev_btn.config(text="上一步",
+                                          state="disabled" if (self.running or self.step_index == 0) else "normal",
+                                          command=self._go_prev)
+                elif _phase == "fixed":
+                    # 批量修正完成 → 让客户选保存位置后导出；单篇走 _export_fix
+                    _export_cmd = self._export_batch_fix if len(self.thesis_paths) > 1 else self._export_fix
+                    self._next_btn.config(text="保存结果", command=_export_cmd,
+                                          state="disabled" if self.running else "normal")
+                    self._prev_btn.config(text="上一步", state="normal", command=self._go_prev)
+                else:  # saved（防御分支：正常已归入 _exported）
+                    self._next_btn.config(text="完成", state="disabled")
+                    self._prev_btn.config(text="再处理一篇", state="normal",
+                                          command=self._reset_wizard)
         else:
             # 第①/②步按钮文案随步骤精细变化（不再一律“下一步”）
             if self.step_index == 0:
@@ -1999,6 +2012,7 @@ class App:
         shutil.rmtree(out_dir, ignore_errors=True)
         if mode == "check":
             self.step_index = len(self.step_defs) - 1
+            self._all_done = True   # 进入终态：时间线灰显锁定 + 主按钮「再处理一篇」
             self._set_status("批量检查完成，已保存 %d 篇检查报告" % self._batch_done_n, OKC)
             self._set_bar("done")
             self._refresh_wizard()
@@ -2031,6 +2045,7 @@ class App:
         """收尾：记录已保存、进入“完成”态并弹完成提示（与单篇 _finish_export 对应）。"""
         self._fix_phase[self._fix_mode] = "saved"
         self._exported[self._fix_mode] = {dst}
+        self._all_done = True   # 进入终态：时间线灰显锁定 + 主按钮「再处理一篇」
         self._set_status("批量处理完成，已保存至文件夹", OKC)
         self._set_bar("done")
         self._refresh_wizard()
@@ -2218,6 +2233,7 @@ class App:
             pass
         self._fix_phase[self._fix_mode] = "saved"
         self._exported[self._fix_mode] = set(saved)
+        self._all_done = True   # 进入终态：时间线灰显锁定 + 主按钮「再处理一篇」
         self._set_status("已保存，可再处理一篇", OKC)
         self._refresh_wizard()
         self._show_fix_done(dst, chk_path, rep_path)
@@ -2342,6 +2358,7 @@ class App:
     def _reset_wizard(self):
         """“再处理一篇”：回到第 1 步并清空选择。"""
         self.step_index = 0
+        self._all_done = False   # 退出终态：恢复时间线可导航、解锁上一步
         self._errored = False
         self._profile_confirmed = False
         self._profile_abandoned = False
