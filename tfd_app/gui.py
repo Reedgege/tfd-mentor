@@ -106,7 +106,7 @@ _FONT_BASE = {
     "F_DIALOG_TITLE": ("KaiTi", 14, "bold"),    # 弹窗标题（楷体）
     "F_ICON":       ("KaiTi", 12, "bold"),      # 印章图标（论 / 模，楷体朱砂）
 }
-APP_VERSION = "1.1.7"
+APP_VERSION = "1.1.8"
 
 # v1.0.31：绿色 zip 版由软件自建桌面快捷方式（win32com 已内置，客户零依赖、零黑框）。
 APP_SHORTCUT_NAME = "论文格式医生·导师版"   # 桌面快捷方式显示名
@@ -1009,7 +1009,7 @@ class App:
             # 第①/②步按钮文案随步骤精细变化（不再一律“下一步”）
             if self.step_index == 0:
                 _next = ("① 提取模板要求" if self.template_path.get().strip()
-                         else "① 按通用规范继续")
+                         else "① 下一步")
             elif self.step_index == 1:
                 _next = "② 开始检查"
             else:
@@ -1308,10 +1308,11 @@ class App:
             messagebox.showerror("缺少输入", "请先选择“待处理论文”（可多选批量导入）。")
             return
 
-        # 批量（≥2 篇）：检查 / 修正都走批量。v1.x：统一改为「先处理、后导出」——
-        # 产出先落本机临时目录，处理完成后再让客户选保存位置（不再一进第③步就先弹“选择批量输出文件夹”）。
+        # 批量（≥2 篇）仅在「检查 / 修正」步（idx≥1）走批量；第①步（提取模板）始终单篇，
+        # 避免多选论文时在第①步误触发整批处理却停在第①步、导致按钮文案与导出都不更新。
+        # v1.x：统一「先处理、后导出」——产出先落本机临时目录，处理完再自动弹“选择保存位置”。
         # v1.0.14：修正此前"仅 fix 模式批量、check 模式选多篇只处理首篇"导致只输出一篇报告的 bug。
-        if len(self.thesis_paths) > 1:
+        if len(self.thesis_paths) > 1 and idx >= 1:
             batch_tmp = tempfile.mkdtemp(prefix="tfd_batch_")
             self._errored = False
             self.running = True
@@ -1952,20 +1953,22 @@ class App:
             self.root.after(0, lambda: self._set_running(False))
 
     def _on_batch_done(self, idx, mode, out_dir, n):
-        # 批量统一「先处理、后导出」：处理完（结果在临时目录 out_dir）再让客户选保存位置。
+        # 批量统一「先处理、后导出」：处理完（结果在临时目录 out_dir）后【自动】弹“选择保存位置”。
         self._batch_tmp = out_dir
         self._batch_done_n = n
         self._batch_idx = idx
+        # 无论在第几步触发批量，处理完都停到「交付 / 结果」步（最后一格），
+        # 保证按钮文案正确切换为「保存结果 / 已完成」、不再卡在旧步骤文案导致不弹导出。
+        self.step_index = len(self.step_defs) - 1
         if mode == "check":
-            # 检查模式批量：处理完弹窗让客户选保存文件夹，把临时产出整体导出后推进到下一步。
+            self._fix_phase[self._fix_mode] = "fixed"
             self._prompt_batch_export("check")
         else:
-            # 修正模式批量：进入「保存结果」子状态，由 _export_batch_fix 让客户选位置后导出
-            # （与单篇修正一致：先修正、后导出；不提前弹文件夹）。
             self._fix_phase[self._fix_mode] = "fixed"
-            self._set_status("批量修正完成，请点击「保存结果」", OKC)
+            self._set_status("批量处理完成，请选择保存位置", OKC)
             self._set_bar("done")
             self._refresh_wizard()
+            self._export_batch_fix()   # 修正 / 批注批量：处理完直接弹“选择保存位置”
 
     def _move_dir_contents(self, src, dst):
         """把 src 目录下的全部文件移动到 dst（跨盘自动复制后删除源）。"""
@@ -1995,11 +1998,14 @@ class App:
             return
         shutil.rmtree(out_dir, ignore_errors=True)
         if mode == "check":
-            self.step_index = self._batch_idx + 1
+            self.step_index = len(self.step_defs) - 1
             self._set_status("批量检查完成，已保存 %d 篇检查报告" % self._batch_done_n, OKC)
             self._set_bar("done")
             self._refresh_wizard()
             self._show_batch_check_done(dst, self._batch_done_n)
+        else:
+            # 防御分支：若本函数被以 fix 模式直接调用，也走正常收尾（与 _export_batch_fix 一致）
+            self._finish_batch_export(dst)
 
     def _export_batch_fix(self):
         """主线程：批量修正完成后让客户选保存位置并导出（先修正、后导出）。"""
