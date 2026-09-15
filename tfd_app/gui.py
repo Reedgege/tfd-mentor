@@ -1330,23 +1330,26 @@ class App:
         """模板 / 手动 互斥：选一个则另一个区域灰隐藏，避免两套格式来源混用。"""
         mode = self.input_mode.get()
         if mode == "manual":
-            if self._template_box.winfo_ismapped():
+            # 用 winfo_manager()=="pack" 守卫：既能覆盖“启动期已 pack 但未 map”的情况
+            # （避免两区域同时显示），又不会对“从未 pack”的控件（手动区默认隐藏）报错
+            if self._template_box.winfo_manager() == "pack":
                 self._template_box.pack_forget()
-            if self._manual_frame.winfo_ismapped():
-                self._manual_frame.pack_forget()
-            # 关键：用 after= 锚定到「格式来源」框之后，否则重新 pack 会落到卡片底部、
-            # 打乱「格式来源 → 学校模板/手动 → 批注署名」的顺序（批注署名会跑到上面）
-            self._manual_frame.pack(fill="x", padx=10, pady=(4, 6), after=self._mode_frame)
+            if self._manual_frame.winfo_manager() != "pack":
+                # 关键：用 after= 锚定到「格式来源」框之后，否则重新 pack 会落到卡片底部、
+                # 打乱「格式来源 → 学校模板/手动 → 批注署名」的顺序（批注署名会跑到上面）
+                self._manual_frame.pack(fill="x", padx=10, pady=(4, 6), after=self._mode_frame)
             self._refresh_manual_status()
         else:
-            if self._manual_frame.winfo_ismapped():
+            if self._manual_frame.winfo_manager() == "pack":
                 self._manual_frame.pack_forget()
-            if not self._template_box.winfo_ismapped():
+            if self._template_box.winfo_manager() != "pack":
                 # 锚定到「格式来源」框之后，避免切回模板时模板框掉到批注署名下方
                 self._template_box.pack(fill="x", padx=14, pady=(2, 2), after=self._mode_frame)
             # 切回模板：清空手动填写状态（已记住配置保留，下次自动载入）
             self._manual_filled = False
             self.manual_profile_path = ""
+            # 清空真正被引擎读取的画像路径，避免沿用刚才的手动画像
+            self.profile_path.set("")
             self._refresh_manual_status()
         self._refresh_wizard()
 
@@ -1385,6 +1388,7 @@ class App:
             self._profile_confirmed = True
             self.root.after(0, self._update_profile_box)
             self.root.after(0, self._refresh_wizard)
+            self.root.after(0, self._refresh_manual_status)
         except Exception as e:
             self._debug("[手动画像构建失败] " + str(e))
             messagebox.showerror("构建失败", "手动格式画像生成失败：%s" % e)
@@ -1678,13 +1682,13 @@ class App:
         # 标题样式映射（通用 Heading1/2/3，让引擎识别标题段落）
         heading_styles = {str(i): {"styleId": "Heading%d" % i, "name": "标题 %d" % i}
                           for i in (1, 2, 3)}
-        # 页面边距（cm → twips）
+        # 页面边距（cm）：写入 *_cm 键、保留厘米值，引擎 _fix_sect_margins 只读 top_cm 等
         page = {}
-        for ck, kk in (("page_top", "top"), ("page_bottom", "bottom"),
-                       ("page_left", "left"), ("page_right", "right")):
+        for ck, cmkey in (("page_top", "top_cm"), ("page_bottom", "bottom_cm"),
+                          ("page_left", "left_cm"), ("page_right", "right_cm")):
             cm = _m_num(v.get(ck))
             if cm is not None:
-                page[kk] = int(round(cm * 567))
+                page[cmkey] = cm
         profile = {
             "source": "手动填写格式",
             "manual": True,
@@ -2940,9 +2944,15 @@ class App:
             else:
                 self.profile_info_var.set("已载入模板格式")
             if not self.profile_box.winfo_ismapped():
-                # 跟随当前可见的来源区：手动模式跟手动区，模板模式跟模板区（避免 after 未 pack 控件报错）
-                _anchor = self._manual_frame if (self.input_mode.get() == "manual"
-                                                 and self._manual_frame.winfo_ismapped()) else self._template_box
+                # 跟随当前可见的来源区：手动模式跟手动区，模板模式跟模板区。
+                # 用 winfo_manager()=="pack" 判断谁真正被 pack（winfo_ismapped 在无头/启动期恒 False，
+                # 会误选已被 pack_forget 隐藏的模板区导致 after 报错）
+                if self._manual_frame.winfo_manager() == "pack":
+                    _anchor = self._manual_frame
+                elif self._template_box.winfo_manager() == "pack":
+                    _anchor = self._template_box
+                else:
+                    _anchor = self._mode_frame  # 兜底：格式来源框始终在
                 self.profile_box.pack(fill="x", padx=14, pady=(4, 8), after=_anchor)
         else:
             if self.profile_box.winfo_ismapped():
