@@ -1597,7 +1597,7 @@ class App:
             rt["sz"] = sz
             rt["size"] = size
         if rt:
-            levels["ref_title"] = rt
+            levels["reference_heading"] = rt
         ri = {}
         if v.get("ref_i_zh_font"):
             ri["zh_font"] = v["ref_i_zh_font"]
@@ -1611,14 +1611,24 @@ class App:
         if lr:
             ri["line_rule"] = lr
             ri["line_val"] = lv
-        hc = _m_num(v.get("ref_hanging"))
-        if hc is not None:
-            ri["hanging_cm"] = hc
+        # 参考文献条目悬挂缩进：按编号位数三档（字符），与引擎 _ref_entry_spec_for_text 对齐
+        # 同时修掉旧版 ref_hanging 缺 ref_i_ 前缀导致读不到的隐藏 bug
+        _tiers = []
+        for _dig, _key in ((1, "ref_i_hanging_1"), (2, "ref_i_hanging_2"), (3, "ref_i_hanging_3")):
+            _hc = _m_num(v.get(_key))
+            if _hc is not None:
+                _tiers.append({"digits": _dig, "chars": _hc})
+        if _tiers:
+            ri["hanging_tiers"] = _tiers
             ri["indent_type"] = "hanging"
+        # 参考文献条目格式必须写入 levels["reference"]（引擎参考文献条目循环读的就是这个 key，
+        # 不是 ref_item）；GB/T 7714 引用格式标记一并带上，便于引擎自动重排
         if ri:
-            levels["ref_item"] = ri
-        # 参考文献引用格式标记（GB/T 7714 顺序编码制，导师版修正后自动重排）
-        levels["reference"] = {"style": "gb7714", "format": "sequential"}
+            ri["style"] = "gb7714"
+            ri["format"] = "sequential"
+            levels["reference"] = ri
+        else:
+            levels["reference"] = {"style": "gb7714", "format": "sequential"}
         # 标题样式映射（通用 Heading1/2/3，让引擎识别标题段落）
         heading_styles = {str(i): {"styleId": "Heading%d" % i, "name": "标题 %d" % i}
                           for i in (1, 2, 3)}
