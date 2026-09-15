@@ -106,7 +106,7 @@ _FONT_BASE = {
     "F_DIALOG_TITLE": ("KaiTi", 14, "bold"),    # 弹窗标题（楷体）
     "F_ICON":       ("KaiTi", 12, "bold"),      # 印章图标（论 / 模，楷体朱砂）
 }
-APP_VERSION = "1.1.12"
+APP_VERSION = "1.1.13"
 
 # v1.0.31：绿色 zip 版由软件自建桌面快捷方式（win32com 已内置，客户零依赖、零黑框）。
 APP_SHORTCUT_NAME = "论文格式医生·导师版"   # 桌面快捷方式显示名
@@ -864,15 +864,7 @@ class App:
         tpl_body = tk.Frame(tpl_canvas, bg="#fdf3e7")
         tk.Label(tpl_body, text="格式优先级：模板批注 ＞ 样式 ＞ 通用规范；无模板时手动填写",
                  bg="#fdf3e7", fg="#7a4e0e", font=F_SMALL_B,
-                 justify="left", anchor="w").pack(fill="x", padx=14, pady=(9, 0))
-        # 说明文字：单行提示即可（v1.1.10 精简，避免占用过多空间）
-        tpl_note_txt = tk.Text(tpl_body, wrap="word", bg="#fdf3e7", fg="#8a5a1a",
-                               font=F_FOOT, relief="flat", bd=0, height=1,
-                               spacing1=2, spacing2=2, spacing3=2,
-                               padx=14, highlightthickness=0, cursor="arrow")
-        tpl_note_txt.insert("1.0", "优先选学校模板；无模板时切到「手动填写格式」自行录入。")
-        tpl_note_txt.config(state="disabled")
-        tpl_note_txt.pack(fill="x", pady=(0, 9))
+                 justify="left", anchor="w").pack(fill="x", padx=14, pady=(9, 9))
         _tpl_rect = tpl_canvas.create_polygon([0, 0, 20, 20], smooth=True,
                                               fill="#fdf3e7", outline="#e6c794")
         _tpl_win = tpl_canvas.create_window(1, 1, window=tpl_body, anchor="nw")
@@ -1437,59 +1429,106 @@ class App:
             w.bind("<Button-5>", _wheel)
 
         widgets = {}
+        ref_detail_widgets = []   # 受「引用默认格式」开关控制折叠的所有控件
+        _in_ref_detail = False      # 当前是否处于参考文献详情区
         row = 0
         for label, key, kind, hint in _MANUAL_FORM:
+            row_widgets = []   # 本行所有 tk 控件
             if key is None:  # 分区标题
-                tk.Label(form, text=label, bg="#eef1ea", fg="#3f5a35",
-                         font=F_SMALL_B, anchor="w").grid(
-                    row=row, column=0, columnspan=3, sticky="ew", padx=4, pady=(8, 3))
+                w = tk.Label(form, text=label, bg="#eef1ea", fg="#3f5a35",
+                             font=F_SMALL_B, anchor="w")
+                w.grid(row=row, column=0, columnspan=3, sticky="ew", padx=4, pady=(8, 3))
+                row_widgets.append(w)
+                # 进出参考文献详情区：标题「参考文献·标题」开始，「页面边距」结束
+                if "参考文献·标题" in label:
+                    _in_ref_detail = True
+                elif "页面边距" in label:
+                    _in_ref_detail = False
+                if _in_ref_detail:
+                    ref_detail_widgets.extend(row_widgets)
                 row += 1
                 continue
-            tk.Label(form, text=label, bg=PAPER, fg=INK, font=F_SMALL).grid(
-                row=row, column=0, sticky="e", padx=(0, 8), pady=3)
+            w = tk.Label(form, text=label, bg=PAPER, fg=INK, font=F_SMALL)
+            w.grid(row=row, column=0, sticky="e", padx=(0, 8), pady=3)
+            row_widgets.append(w)
             cur = (init or {}).get(key, "")
+            ctl = None
+            if kind == "ref_default":
+                var = tk.BooleanVar(value=bool(cur))
+                ctl = tk.Checkbutton(form, variable=var, bg=PAPER,
+                                     activebackground=PAPER,
+                                     text="使用 GB/T 7714 默认格式（下方参考文献项无需填写）")
+                ctl.grid(row=row, column=1, sticky="w", pady=3)
+                widgets[key] = (var, "bool")
+                row += 1
+                continue
             if kind in ("zh_font", "en_font"):
                 var = tk.StringVar(value=cur)
                 cb = ttk.Combobox(form, textvariable=var, width=22, font=F_SMALL,
                                   values=_MANUAL_ZH_FONTS if kind == "zh_font" else _MANUAL_EN_FONTS)
                 cb.grid(row=row, column=1, sticky="w", pady=3)
+                ctl = cb
                 widgets[key] = (var, "combo_edit")
             elif kind == "size":
                 var = tk.StringVar(value=cur)
                 cb = ttk.Combobox(form, textvariable=var, width=14, font=F_SMALL,
                                   values=_MANUAL_SIZES, state="readonly")
                 cb.grid(row=row, column=1, sticky="w", pady=3)
+                ctl = cb
                 widgets[key] = (var, "combo")
             elif kind == "align":
                 var = tk.StringVar(value=cur)
                 cb = ttk.Combobox(form, textvariable=var, width=14, font=F_SMALL,
                                   values=_MANUAL_ALIGNS, state="readonly")
                 cb.grid(row=row, column=1, sticky="w", pady=3)
+                ctl = cb
                 widgets[key] = (var, "combo")
             elif kind == "line_type":
                 var = tk.StringVar(value=cur)
                 cb = ttk.Combobox(form, textvariable=var, width=14, font=F_SMALL,
                                   values=_MANUAL_LINE_TYPES, state="readonly")
                 cb.grid(row=row, column=1, sticky="w", pady=3)
+                ctl = cb
                 widgets[key] = (var, "combo")
             elif kind == "bold":
                 var = tk.BooleanVar(value=bool(cur))
                 cb = tk.Checkbutton(form, variable=var, bg=PAPER,
                                     activebackground=PAPER)
                 cb.grid(row=row, column=1, sticky="w", pady=3)
+                ctl = cb
                 widgets[key] = (var, "bool")
             else:  # num
                 var = tk.StringVar(value=cur)
                 ent = tk.Entry(form, textvariable=var, width=14, font=F_SMALL,
                                relief="solid", bd=1)
                 ent.grid(row=row, column=1, sticky="w", pady=3)
+                ctl = ent
                 widgets[key] = (var, "text")
             if hint:
-                tk.Label(form, text=hint, bg=PAPER, fg="#9a9486",
-                         font=F_FOOT).grid(row=row, column=2, sticky="w", padx=(6, 0), pady=3)
+                h = tk.Label(form, text=hint, bg=PAPER, fg="#9a9486",
+                             font=F_FOOT)
+                h.grid(row=row, column=2, sticky="w", padx=(6, 0), pady=3)
+                row_widgets.append(h)
+            if ctl is not None:
+                row_widgets.append(ctl)
+            if _in_ref_detail:
+                ref_detail_widgets.extend(row_widgets)
             row += 1
 
-        top.after(10, lambda: canvas.yview_moveto(0))
+        # 「引用默认格式」开关：勾选则折叠隐藏下方参考文献字段，确认时也不写入
+        _ref_def_var = widgets.get("ref_use_default", (None,))[0]
+        if _ref_def_var is not None and ref_detail_widgets:
+            def _apply_ref_state(*_a):
+                if _ref_def_var.get():
+                    for w in ref_detail_widgets:
+                        w.grid_remove()
+                else:
+                    for w in ref_detail_widgets:
+                        w.grid()
+                # 隐藏/展开后滚动区域变化，触发重算
+                form.event_generate("<Configure>")
+            _ref_def_var.trace_add("write", _apply_ref_state)
+            _apply_ref_state()
 
         def on_confirm():
             vals = {}
