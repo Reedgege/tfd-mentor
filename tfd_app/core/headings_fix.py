@@ -216,6 +216,11 @@ def _set_run_rpr(run, spec):
     含图片(w:drawing/w:pict)的 run 不触碰——避免向图片注入字体/字号导致渲染异常。"""
     if _run_has_image(run):
         return
+    # v1.3.121：spec 只含段落级字段（align/缩进/段距/行距）而无 run 级字段
+    # （zh_font/en_font/bold/sz）时，不改写 run 的 rPr，避免清空原显式字体/字号
+    # （标题 hspec 仅含 align 时若照旧重写会抹掉原字体/字号，造成二次修正损坏）。
+    if not (spec.get('zh_font') or spec.get('en_font') or spec.get('bold') or spec.get('sz')):
+        return
     old = run.find(WR + 'rPr')
     if old is not None:
         run.remove(old)
@@ -393,6 +398,12 @@ def _para_needs_fix(p, spec):
             _cur_zh = rf.get(WR + 'eastAsia') if rf is not None else None
             if _cur_zh != spec['zh_font']:
                 return True
+        # v1.3.121：西文字体检查——模板要求西文字体（如 Times New Roman）时，
+        # 若 run 的 ascii/hAnsi 不符也判需改（此前只检查中文字体，导致西文不换）。
+        if spec.get('en_font'):
+            _cur_en = (rf.get(WR + 'ascii') or rf.get(WR + 'hAnsi')) if rf is not None else None
+            if _cur_en != spec['en_font']:
+                return True
         sz = rpr.find(WR + 'sz')
         # v1.3.80：字号漏判修复——run 无 <w:sz>（字号继承自样式）同样视为需改。
         if spec.get('sz'):
@@ -407,6 +418,12 @@ def _para_needs_fix(p, spec):
         want = _num(spec.get('indent_chars', 0)) * 100
         cur = ind.get(WR + 'firstLineChars') if ind is not None else None
         if cur is None or int(cur) != want:
+            return True
+    # v1.3.121：无缩进要求（indent_type=='none' 或 indent_chars==0）但未满足时仍需改：
+    # 段落仍带 <w:ind> → 清掉（此前只检查"有首行缩进"，漏判"该无缩进却残留"）。
+    if (spec.get('indent_type') == 'none' or spec.get('indent_chars') == 0):
+        _ind = ppr.find(WR + 'ind') if ppr is not None else None
+        if _ind is not None:
             return True
     # 对齐方式
     if spec.get('align'):
@@ -458,6 +475,23 @@ def _para_needs_fix(p, spec):
         cur_left = ind.get(WR + 'leftChars') if ind is not None else None
         if cur_left is None or abs(int(cur_left) - want_chars) > 10:
             return True
+    # 加粗要求（v1.3.121，Codex 审查 P2-6）：spec 要求加粗时，段落任一含文字 run
+    # 的显式 rPr 无 <w:b>（非 false/0/off）即视为未加粗→需改。
+    if spec.get('bold'):
+        _bold_ok = False
+        for r in p.iter(WR + 'r'):
+            if r.find(WR + 'commentReference') is not None:
+                continue
+            if not ''.join(t.text or '' for t in r.iter(WR + 't')).strip():
+                continue
+            rpr = r.find(WR + 'rPr')
+            if rpr is not None:
+                b = rpr.find(WR + 'b')
+                if b is not None and b.get(WR + 'val') not in ('false', '0', 'off'):
+                    _bold_ok = True
+                    break
+        if not _bold_ok:
+            return True
     return False
 
 
@@ -476,7 +510,7 @@ def _heading_needs_fix(p, hspec, target):
     if cur != target:
         return True
     # 样式已对：比对 hspec 显式要素与段落「显式」属性（继承字体的 run 不参与判定）
-    if hspec.get("zh_font") or hspec.get("sz"):
+    if hspec.get("zh_font") or hspec.get("sz") or hspec.get("en_font"):
         for r in p.iter(WR + "r"):
             if r.find(WR + "commentReference") is not None:
                 continue
@@ -489,6 +523,10 @@ def _heading_needs_fix(p, hspec, target):
             if hspec.get("zh_font"):
                 _cur_zh = rf.get(WR + "eastAsia") if rf is not None else None
                 if _cur_zh is not None and _cur_zh != hspec["zh_font"]:
+                    return True
+            if hspec.get("en_font"):
+                _cur_en = (rf.get(WR + "ascii") or rf.get(WR + "hAnsi")) if rf is not None else None
+                if _cur_en is not None and _cur_en != hspec["en_font"]:
                     return True
             if hspec.get("sz"):
                 sz = rpr.find(WR + "sz")
@@ -621,8 +659,12 @@ def _style_xml_to_hspec(xml_str):
                 spec["sz"] = int(sz.get(WR + "val"))
             except (ValueError, TypeError):
                 pass
-        if rpr.find(WR + "b") is not None:
-            spec["bold"] = True
+        _b = rpr.find(WR + "b")
+        if _b is not None:
+            _bv = _b.get(WR + "val")
+            # 仅缺省 <w:b/> 或显式 true/1/on 视为加粗；<w:b w:val="false|0|off"/> 不算
+            if _bv is None or _bv not in ("false", "0", "off"):
+                spec["bold"] = True
     ppr = el.find(WR + "pPr")
     if ppr is not None:
         jc = ppr.find(WR + "jc")
@@ -1181,6 +1223,31 @@ def _initials_for(author):
     return a[:2] if a else "LGFD"
 
 
+def _existing_comment_texts(z, p):
+    """取段落 p 已有的批注文本集合（用于幂等去重：已存在的提示类批注不再重复追加）。"""
+    refs = list(p.iter(WR + "commentReference"))
+    if not refs:
+        return set()
+    cids = set()
+    for r in refs:
+        cid = r.get(WR + "id")
+        if cid is not None:
+            cids.add(cid)
+    try:
+        data = z.read("word/comments.xml")
+    except Exception:
+        return set()
+    try:
+        croot = ET.fromstring(data)
+    except Exception:
+        return set()
+    out = set()
+    for c in croot.findall(WR + "comment"):
+        if c.get(WR + "id") in cids:
+            out.add("".join(t.text or "" for t in c.iter(WR + "t")))
+    return out
+
+
 def _apply_comments(z, root, changes, replacements, author=None):
     """为 changes 中每个带 `_para` 段落引用的 change 添加 Word 批注。
 
@@ -1207,6 +1274,10 @@ def _apply_comments(z, root, changes, replacements, author=None):
         # Word 会按作者分配不同的气泡颜色，与"已修改"批注（base）区分开。
         _kind = c.get("kind", "")
         if _kind.endswith("_note") or _kind == "suspected_caption":
+            # v1.3.121：幂等去重——若段落已存在相同文本的提示批注（同一文档二次修正），
+            # 跳过不再追加，避免重复气泡（Codex 审查指出的"改完再改一遍又出一堆批注"根因）。
+            if text in _existing_comment_texts(z, p):
+                continue
             add_comment_marker(p, next_id, text, comments_root,
                                author=base + "·提示", initials=_initials_for(base))
         else:
@@ -1316,6 +1387,15 @@ def _looks_like_body_despite_heading_style(text):
     """
     t = (text or "").strip()
     if not t:
+        return False
+    # v1.3.121：强标题前缀豁免（即便超长或带句末标点）——避免真实长章标题被误降级
+    # （Codex 审查指出的长标题 >30 字误判正文）。以"第X章/节/篇/编"或多级编号
+    # (1.1/2.3.1) 或中文序数(一、二、)开头的段落，应判为标题而非正文。
+    if re.match(r"^第[一二三四五六七八九十百千\d]+[章篇编节]", t):
+        return False
+    if re.match(r"^\d+\.\d+", t):
+        return False
+    if re.match(r"^[一二三四五六七八九十百千]+、", t):
         return False
     # 完整句子结尾
     if t[-1] in "。！？；.!?;":
@@ -2043,7 +2123,7 @@ def fix(src, dst, profile=None, add_comments=True, author=None):
                         "conf": 0.9, "_para": pp,
                     })
 
-    if profile:
+    if profile and _MODIFY:
         try:
             _, margin_changes = _fix_sect_margins(root, profile)
             for label, old_disp, new_disp in margin_changes:
@@ -2059,17 +2139,23 @@ def fix(src, dst, profile=None, add_comments=True, author=None):
     # ---- 半角标点自动替换（独立 pass，在所有正文格式套用之后执行）----
     # 保守替换：仅对正文区散文段落生效，跳过标题/表格/图片/题注/目录样式/结构页。
     # 不替换句号和引号，宁可漏换不可错换。每条替换记录到 changes（kind="punctuation"）。
-    punct_changes = _punctuation_pass(
-        root, first_chap, ref_start, tbl_ps, cap_targets, styles_map, heading_sids)
-    changes.extend(punct_changes)
+    if _MODIFY:
+        punct_changes = _punctuation_pass(
+            root, first_chap, ref_start, tbl_ps, cap_targets, styles_map, heading_sids)
+        changes.extend(punct_changes)
+    else:
+        punct_changes = []
 
     # ---- v1.3.4：自动编号(numPr)转正文（独立 pass，正文区域非标题段）----
     # 客户论文中常用 Word 自动编号列表，格式调整后编号可能异常增加或错乱；
     # 移除正文段 pPr 下的 numPr，使编号不再自动生成（保留文字内容）。
     # 标题段、表格内段、结构页、题注段都不动。
-    numbering_changes = _remove_numbering_pass(
-        root, first_chap, ref_start, tbl_ps, cap_targets, styles_map, heading_sids)
-    changes.extend(numbering_changes)
+    if _MODIFY:
+        numbering_changes = _remove_numbering_pass(
+            root, first_chap, ref_start, tbl_ps, cap_targets, styles_map, heading_sids)
+        changes.extend(numbering_changes)
+    else:
+        numbering_changes = []
 
     # 报告分级：置信度 ≥0.8 视为确定套用（applied），低于则归 low_conf 供人工复核。
     # 中文序号标题（一、/（一）/第X章等）置信度 0.85，属确定套用，须与文档实际落盘一致。

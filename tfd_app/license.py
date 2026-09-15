@@ -480,6 +480,13 @@ def check_local_valid():
     exp = lic.get("expire")
     if exp and int(time.time() * 1000) > exp:
         return False
+    # v1.1.16：次卡（type=times）用尽拦截——本地 uses_used >= uses_total 则失效，
+    # 避免次卡被无限使用（Codex 审查 P1-3；导师版此前无 consume 路径，补本地兜底）。
+    if lic.get("type") == "times":
+        _total = lic.get("uses_total")
+        _used = lic.get("uses_used") or 0
+        if _total is not None and _used >= _total:
+            return False
     return True
 
 
