@@ -1134,7 +1134,8 @@ class App:
                                           state="disabled" if self.running else "normal",
                                           command=self._go_prev)
                 elif _phase == "idle":
-                    self._next_btn.config(text=_fix_label, command=self._run_step,
+                    # v1.1.14：第③步点主按钮前先弹温馨确认，避免一路点过去没注意选了哪种交付方式
+                    self._next_btn.config(text=_fix_label, command=self._confirm_delivery,
                                           state="disabled" if self.running else "normal")
                     self._prev_btn.config(text="上一步",
                                           state="disabled" if (self.running or self.step_index == 0) else "normal",
@@ -1921,6 +1922,38 @@ class App:
         self._set_bar("idle")
         self._refresh_wizard()
 
+    def _confirm_delivery(self):
+        """第③步（最后一步）点主按钮真正开始处理前，温馨确认当前选中的交付方式。
+
+        导师版默认选「只批注（选 1）」，用户常一路点「下一步」没注意选了哪种，
+        这里把当前选择念出来让他再确认一次，避免误跑错交付方式（尤其「一键修正」会改动原稿）。
+        非第③步或非 idle 态（如「保存结果」）一律透传给 _run_step，不影响其他流程。
+        """
+        if self.step_index != len(self.step_defs) - 1:
+            self._run_step()
+            return
+        if self._fix_phase.get(self._fix_mode, "idle") != "idle":
+            self._run_step()
+            return
+        _info = {
+            "annotate": ("选 1 · 只批注·不改原稿",
+                         "仅生成批注副本，不会改动您的原稿论文。"),
+            "fix": ("选 2 · 一键修正·直接改好",
+                    "将按学校模板要求直接修正论文内容（会改动原稿）。"),
+            "both": ("选 3 · ①+② 都要",
+                     "将同时生成批注副本与已修正版两套文件。"),
+        }[self._fix_mode]
+        _title, _desc = _info
+        _ok = messagebox.askyesno(
+            "请确认交付方式",
+            "第③步即将开始处理，您当前选择的交付方式是——\n\n"
+            "        【%s】\n\n"
+            "%s\n\n"
+            "确定要按此方式继续吗？\n"
+            "（如需更换，请点「上一步」后重新选择交付方式）" % (_title, _desc))
+        if _ok:
+            self._run_step()
+
     def _run_step(self):
         if self._dialog_open:
             return  # 保存对话框已打开，防连点重复弹窗
@@ -2616,7 +2649,9 @@ class App:
         # 保证按钮文案正确切换为「保存结果 / 已完成」、不再卡在旧步骤文案导致不弹导出。
         self.step_index = len(self.step_defs) - 1
         if mode == "check":
-            self._fix_phase[self._fix_mode] = "fixed"
+            # v1.1.14：批量检查完成≠交付方式完成——不要提前把 _fix_phase 标 fixed，
+            # 否则第③步会误显示「保存结果」且用户还没生成修正稿。检查完后停在第③步，
+            # 让客户按需要选择「只批注 / 一键修正 / ①+② 都要」并继续，与单篇流程一致。
             self._prompt_batch_export("check")
         else:
             self._fix_phase[self._fix_mode] = "fixed"
@@ -2653,9 +2688,11 @@ class App:
             return
         shutil.rmtree(out_dir, ignore_errors=True)
         if mode == "check":
+            # v1.1.14：批量检查完成后停在第③步（交付方式选择），而非直接终态——
+            # 否则客户选了「一键修正 / ①+② 都要」也跑不到，只能「再处理一篇」重来。
+            # 这里只把步骤定位到第③步并刷新，交付方式按钮正常可点，与单篇检查→第③步一致。
             self.step_index = len(self.step_defs) - 1
-            self._all_done = True   # 进入终态：时间线灰显锁定 + 主按钮「再处理一篇」
-            self._set_status("批量检查完成，已保存 %d 篇检查报告" % self._batch_done_n, OKC)
+            self._set_status("批量检查完成，请选择交付方式后继续", OKC)
             self._set_bar("done")
             self._refresh_wizard()
             self._show_batch_check_done(dst, self._batch_done_n)
