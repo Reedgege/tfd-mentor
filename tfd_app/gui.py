@@ -106,7 +106,7 @@ _FONT_BASE = {
     "F_DIALOG_TITLE": ("KaiTi", 14, "bold"),    # 弹窗标题（楷体）
     "F_ICON":       ("KaiTi", 12, "bold"),      # 印章图标（论 / 模，楷体朱砂）
 }
-APP_VERSION = "1.1.14"
+APP_VERSION = "1.1.15"
 
 # v1.0.31：绿色 zip 版由软件自建桌面快捷方式（win32com 已内置，客户零依赖、零黑框）。
 APP_SHORTCUT_NAME = "论文格式医生·导师版"   # 桌面快捷方式显示名
@@ -1284,6 +1284,7 @@ class App:
             self._profile_confirmed = False
             if self._tpl_locked:
                 self._save_template_lock(p)
+            self._refresh_wizard()  # v1.1.15：选了模板后刷新向导按钮文案
 
     # --------------------------------------------------- 模板锁定（记住模板）
     def _template_lock_path(self):
