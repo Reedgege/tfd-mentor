@@ -1993,6 +1993,11 @@ def fix(src, dst, profile=None, add_comments=True, author=None):
             for i, p in enumerate(paras_list):
                 if p in tbl_ps:
                     continue
+                # v1.1.23：目录条目（如「摘要I」「ABSTRACTII」）含页码后缀，
+                # 会被 classify_structural_title 误判为摘要标题；此处显式跳过任何
+                # 目录样式/目录域段落，保证目录零触碰。
+                if _is_toc_style(_cur_style_id(p), styles_map) or _para_has_toc_field(p):
+                    continue
                 _t = _text_of(p).strip()
                 if not _t:
                     continue
@@ -2058,6 +2063,10 @@ def fix(src, dst, profile=None, add_comments=True, author=None):
                 for _j in range(_i + 1, _end):
                     _cp = paras_list[_j]
                     if _cp in tbl_ps:
+                        continue
+                    # 目录条目不应被上一结构页标题的内容 sweep 覆盖（如「摘要I」标题后
+                    # 的「ABSTRACTII」目录条目被误当摘要内容）。
+                    if _is_toc_style(_cur_style_id(_cp), styles_map) or _para_has_toc_field(_cp):
                         continue
                     _ct = _text_of(_cp).strip()
                     if not _ct or _has_image(_cp):
