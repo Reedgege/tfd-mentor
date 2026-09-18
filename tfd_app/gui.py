@@ -106,7 +106,7 @@ _FONT_BASE = {
     "F_DIALOG_TITLE": ("KaiTi", 14, "bold"),    # 弹窗标题（楷体）
     "F_ICON":       ("KaiTi", 12, "bold"),      # 印章图标（论 / 模，楷体朱砂）
 }
-APP_VERSION = "1.1.24"
+APP_VERSION = "1.1.25"
 
 # v1.0.31：绿色 zip 版由软件自建桌面快捷方式（win32com 已内置，客户零依赖、零黑框）。
 APP_SHORTCUT_NAME = "论文格式医生·导师版"   # 桌面快捷方式显示名
@@ -2046,16 +2046,20 @@ class App:
         在 worker 线程调用（内部弹窗走主线程 Event 同步）。返回 True=可继续。"""
         licensed = trial.is_licensed()
         if licensed:
-            return True
+            return True                      # 正式版：不联网、不卡顿
         left = trial.trials_left()
         if left <= 0:
             self.root.after(0, self._show_trial_exhausted)
             return False
         if not self._ask_trial_confirm(left):
             return False
+        # 试用扣减需连接中台核验/登记（堵「删 trial.json 重置」白嫖）：
+        # 先明确提示正在联网，避免用户把这段网络等待误判为卡死。
+        self.root.after(0, lambda: self._set_status("正在验证试用额度，请稍后…", MUTED))
         if not trial.consume_trial():
             self.root.after(0, self._show_trial_exhausted)
             return False
+        self.root.after(0, lambda: self._set_status("验证通过，开始生成文档…", MUTED))
         return True
 
     def _worker(self, idx, mode, src, dst=None):
@@ -2807,10 +2811,10 @@ class App:
                 "试用次数已用完",
                 "本机试用已满 %d 次。\n\n"
                 "正式版激活后：不限次数修正、输出无水印文档、一键交稿。\n\n"
-                "获取激活码：请关注公众号【芦苇不熬夜】（ID：reedskill）或联系客服。\n"
-                "激活教程与购买方式详见官网 reedskill.com。\n"
-                "激活码购买与激活问题，公众号留言即可。" % trial.TRIAL_LIMIT,
-                [("ok", "知道了")])
+                "推荐购买：微信扫上方小程序码，或搜索小程序【%s】，付款后自动发码。\n"
+                "也可关注公众号【芦苇不熬夜】（ID：reedskill）或前往官网 reedskill.com 购买。\n"
+                "激活码购买与激活问题，公众号留言即可。" % (trial.TRIAL_LIMIT, MINIAPP_NAME),
+                [("ok", "知道了")], image_path=MINIAPP_QRCODE)
             ev.set()
 
         self.root.after(0, show)
@@ -2945,7 +2949,7 @@ class App:
         self._refresh_wizard()
         self._show_fix_done(dst, chk_path, rep_path)
 
-    def _modal(self, title, text, buttons):
+    def _modal(self, title, text, buttons, image_path=None):
         result = {"v": None}
         top = tk.Toplevel(self.root)
         top.title(title)
@@ -2956,6 +2960,20 @@ class App:
                                  self.root.winfo_rooty() + 120))
         tk.Label(top, text=text, bg=PAPER, fg=BODY, font=F_BODY, justify="left",
                  wraplength=480).pack(padx=24, pady=(20, 14))
+        # v1.x：可选二维码（如试用用完窗口放小程序购买码）；资源缺失自动跳过，不影响其余内容
+        if image_path and os.path.isfile(image_path):
+            try:
+                _img = tk.PhotoImage(file=image_path)
+                _img = _img.subsample(max(1, round(_img.width() / 130)))
+                _qr = tk.Frame(top, bg=PAPER)
+                _qr.pack(pady=(0, 6))
+                _qrlbl = tk.Label(_qr, image=_img, bg=PAPER)
+                _qrlbl.image = _img   # 保留引用，防被 GC 后图片消失
+                _qrlbl.pack()
+                tk.Label(_qr, text="微信扫一扫，直接购买激活码",
+                         bg=PAPER, fg=MUTED, font=F_SMALL).pack(pady=(6, 0))
+            except Exception:
+                pass
         fr = tk.Frame(top, bg=PAPER)
         fr.pack(pady=(0, 18))
         for key, label in buttons:
@@ -3289,7 +3307,7 @@ def show_activation(root, show_trial=True):
     # v1.3.58：试用入口放在显眼位置（激活按钮正下方，便于未购买客户先体验）
     # v1.3.66：仅启动时首次弹窗显示；从主界面激活入口打开时客户已在试用模式，无需再显示
     if show_trial:
-        ttk.Button(top, text="还没有激活码？先试用（免费 2 次）", style="Ghost.TButton",
+        ttk.Button(top, text="还没有激活码？先试用（免费 %d 次）" % trial.TRIAL_LIMIT, style="Ghost.TButton",
                    command=lambda: (result.update(v="trial"), top.destroy())).pack(pady=(4, 2))
         tk.Label(top, text="试用版可完整体验一键修正，输出带水印且为只读预览；正式版可编辑无水印。",
                  bg=PAPER, fg=MUTED, font=F_FOOT, wraplength=540).pack(pady=(0, 6))

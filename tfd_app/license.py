@@ -185,7 +185,7 @@ def _trial_sync(machine_code, claim=False):
     """试用额度登记/查询（中台）。网络失败返回 None，由调用方走本地兜底。"""
     resp, err = _http_json(TRIAL_PATH, {
         "product": DEFAULT_PRODUCT, "machine_code": machine_code,
-        "claim": bool(claim)}, 3)
+        "claim": bool(claim)}, 2)
     if err:
         return None
     return resp
