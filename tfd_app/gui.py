@@ -126,7 +126,7 @@ _FONT_BASE = {
     "F_DIALOG_TITLE": ("KaiTi", 14, "bold"),    # 弹窗标题（楷体）
     "F_ICON":       ("KaiTi", 12, "bold"),      # 印章图标（论 / 模，楷体朱砂）
 }
-APP_VERSION = "1.1.28"
+APP_VERSION = "1.1.29"
 
 # v1.0.31：绿色 zip 版由软件自建桌面快捷方式（win32com 已内置，客户零依赖、零黑框）。
 APP_SHORTCUT_NAME = "论文格式医生·导师版"   # 桌面快捷方式显示名
@@ -3691,10 +3691,13 @@ def main():
         except Exception:
             pass
     root = tk.Tk()
+    # 关键：创建主窗后立即 withdraw 隐藏，再做字体/图标等初始化——
+    # 否则 tk.Tk() 创建出的窗口在初始化（_init_fonts/_apply_app_icon 会触发绘制）
+    # 完成前短暂可见，启动时会"闪一下"小窗。先藏好可彻底消除该闪窗。
+    root.withdraw()
     _init_fonts(root)
     # 在任何窗口（激活窗/主窗）出现之前先设好图标，否则任务栏会先显示 Tk 默认图标
     _apply_app_icon(root, as_default=True)
-    root.withdraw()
     if (not license.check_local_valid()) or license.is_revoked():
         # 未激活（或被后台撤销）时弹激活窗，但提供"先试用"入口（不进主界面则退出）
         r = show_activation(root)
