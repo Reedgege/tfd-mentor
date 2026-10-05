@@ -2182,7 +2182,22 @@ class App:
 
     def _trial_ok(self):
         """试用门禁：已激活直接放行；未激活则校验次数/弹确认，扣减失败拦截。
-        在 worker 线程调用（内部弹窗走主线程 Event 同步）。返回 True=可继续。"""
+        在 worker 线程调用（内部弹窗走主线程 Event 同步）。返回 True=可继续。
+
+        v1.1.38 关键修正（计费纠纷级）：此前只要 trial.is_licensed() 为假，就一律
+        当「未激活用户」走试用分支 —— 而次卡额度用尽 / 授权到期时
+        check_local_valid() 同样返回假，于是付过钱的客户被当成试用用户，
+        弹出「试用次数已用完」+ 买码引导，措辞与引导全错；更糟的是拦截发生在联网
+        之前，中台连「已用尽」信号都收不到（线上 status 卡在 active 就是证据）。
+        现在先认「本机有没有授权码」：有码 = 付费客户 → 走授权提示；没码才走试用。
+        """
+        _lic = license.load_local_license() or {}
+        if _lic.get("code"):
+            # 本机有授权码 → 付费客户，绝不掉进试用分支
+            if license.check_local_valid():
+                return True                  # 授权有效：放行（额度预检由 _do_fix 负责）
+            self._show_license_unusable()    # 说准原因：次卡用尽 / 到期（内部自切主线程）
+            return False
         licensed = trial.is_licensed()
         if licensed:
             return True                      # 正式版：不联网、不卡顿
@@ -2636,23 +2651,28 @@ class App:
         if saved:
             self._show_check_done(dst)
 
-    def _guard_license(self):
-        """付费操作前守卫：本地失效立即拦；联网实时校验（次卡扣次、其他卡只校验）。
-        返回 True=放行；False=已拦截。
+    def _guard_license(self, dry_run=False):
+        """付费操作守卫：本地失效立即拦；联网实时校验。返回 True=放行；False=已拦截。
 
         v1.1.36：导师版此前**没有这道门**——次卡从不扣次（¥20 次卡可无限用）。
         现与学生版对齐：次卡必须联网扣次（离线即拦）；永久/月卡启动已核验则免联网。
+
+        v1.1.38 **扣次时机改造（客户不再为失败的修正买单）**：
+          dry_run=True  → 修正【前】的额度预检：只问「这次能不能放行」，**不扣次**；
+          dry_run=False → 修正【成功产出之后】才调用的真扣次（见 _settle_use）。
+        老行为是「修正前先扣次」，一旦修正中途报错/客户取消，那一次就白扣了——
+        对 1 次卡这种一次性卡种尤其致命。现在改成先干活、出文件才收钱。
         """
         if license.is_revoked():
             self.root.after(0, self._handle_revoked)
             return False
         _lic = license.load_local_license() or {}
-        # 启动已一次性核验成功且非次卡 → 免联网直接放行（次卡必须扣次，不在此列）
+        # 启动已一次性核验成功且非次卡 → 免联网直接放行（次卡必须查额度，不在此列）
         if license.is_launch_verified() and _lic.get("type") != "times":
             return True
         if _lic.get("type") == "times":
             self._set_status("正在验证激活额度，请稍后…", MUTED)
-        st = license.consume_use()
+        st = license.consume_use(dry_run=dry_run)
         if st in ("revoked", "expired"):
             self.root.after(0, self._handle_revoked)
             return False
@@ -2661,17 +2681,54 @@ class App:
             _lic = license.load_local_license()
             if (_lic or {}).get("type") == "times":
                 self.root.after(0, lambda: messagebox.showwarning(
-                    "需要联网", "次卡需在联网状态下扣减次数。\n请连接网络后重试。"))
+                    "需要联网", "次卡需在联网状态下确认并扣减次数。\n请连接网络后重试。"))
                 return False
         return True
+
+    def _settle_use(self):
+        """**交付成功之后**才收钱：次卡扣 1 次（后台线程调用，不卡界面）。
+
+        v1.1.38：扣次从「修正前」挪到「客户真正拿到文件之后」——
+        修正失败、客户取消保存、导出中断，一律不扣次。
+        这是收钱的命门：**宁可少收一次，绝不让客户为没拿到的东西付钱**。
+
+        扣次失败（离线 / 中台异常）→ 记本机欠账（owed + 乐观推进 uses_used），
+        下次联网自动补扣（license.pay_owed），既不冤枉客户、也不放跑白嫖。
+        """
+        try:
+            _lic = license.load_local_license() or {}
+            if not _lic.get("code"):
+                return                                   # 未激活（走的是试用）→ 不计费
+            if (_lic.get("type") or "") != "times":
+                return                                   # 永久 / 月卡：不按次计费
+            st = license.consume_use()
+            if st in ("revoked", "expired"):
+                self.root.after(0, self._handle_revoked)
+                return
+            if st == "offline":
+                # 文件已经给到客户了，这一次却没扣上 → 记欠账，联网后补扣
+                license.owe_use()
+                self._debug("[结算] 离线，已记本机欠账，联网后自动补扣")
+            else:
+                self._debug("[结算] 次卡已扣 1 次")
+            self.root.after(0, self._update_trial_badge)   # 徽标立刻反映最新次数
+        except Exception as e:
+            # 异常也绝不白送：记欠账等补扣
+            try:
+                license.owe_use()
+            except Exception:
+                pass
+            self._debug("[结算异常] " + str(e))
 
     def _do_fix(self, src, docx_path, dst):
         # 授权被后台撤销（退款锁死）：直接拦截，禁止继续修正
         if license.is_revoked():
             self.root.after(0, self._handle_revoked)
             return False
-        # v1.1.36：次卡联网扣次 + 实时校验（防退款撤销 / 到期 / 次卡用尽）
-        if not self._guard_license():
+        # v1.1.38：修正【前】只做额度预检（dry_run，**不扣次**）。
+        # 真正的扣次挪到客户导出成功之后（_finish_export → _settle_use），
+        # 保证「修正失败 / 客户取消保存 / 导出中断」都不收钱。
+        if not self._guard_license(dry_run=True):
             return False
         # 第③步修正：按当前 _fix_mode 产出（both=批注副本+已修正版各一套，不重跑论文）。
         # 产出先落临时目录，待主线程 _export_fix 让客户选保存位置；结果存入 self._fix_outs。
@@ -3022,6 +3079,37 @@ class App:
         self.root.after(0, show)
         ev.wait(30)
 
+    def _show_license_unusable(self):
+        """付费客户、但授权当前不可用（次卡用尽 / 到期 / 被撤销）：说准原因与出路。
+
+        v1.1.38：此前这类客户会掉进「试用次数已用完」的弹窗——人家明明买了卡，
+        看到的却是试用文案 + 买码引导，措辞和引导全错，是投诉隐患。
+        现在按真实原因给文案（次卡用尽 →「次数已用完，请续费」）。
+
+        任意线程可调用：worker 线程（_trial_ok 的正常路径）会排到主线程弹出。
+        """
+        def _dialog():
+            try:
+                reason = license.get_lock_reason()
+            except Exception:
+                reason = None
+            if not reason:
+                _l = license.load_local_license() or {}
+                _total = _l.get("uses_total")
+                _used = _l.get("uses_used") or 0
+                if ((_l.get("type") or "") == "times"
+                        and isinstance(_total, int) and _used >= _total):
+                    reason = "uses_exhausted"
+                else:
+                    reason = "expired"
+            title, body = _revoked_message(reason)
+            self._modal(title, body, [("ok", "知道了")])
+
+        if threading.current_thread() is threading.main_thread():
+            _dialog()                        # 已在主线程：直接弹，不能排 after 等自己
+            return
+        self.root.after(0, _dialog)
+
     def _on_trial_blocked(self):
         """试用被拦截（用完/取消）：停留在当前步，给友好提示。"""
         self._errored = False
@@ -3142,6 +3230,12 @@ class App:
         try:
             for d in temp_dirs:
                 shutil.rmtree(d, ignore_errors=True)
+        except Exception:
+            pass
+        # v1.1.38：走到这里 = 客户已真正把文件存到自己选的位置 → **现在才收钱**。
+        # 次卡扣 1 次（后台线程，不卡界面）；扣次失败（离线）记本机欠账，联网补扣。
+        try:
+            threading.Thread(target=self._settle_use, daemon=True).start()
         except Exception:
             pass
         self._fix_phase[self._fix_mode] = "saved"
@@ -4208,8 +4302,16 @@ def main():
     app = App(root)
 
     def _refresh_license_at_launch():
-        """后台线程：启动即向中台核对授权 + 版本（fail-soft，不阻塞首屏）。"""
+        """后台线程：启动即补扣欠账 + 向中台核对授权与版本（fail-soft，不阻塞首屏）。"""
         try:
+            # v1.1.38：先把「拿到文件但没扣上」的欠账补扣掉，再核对授权状态。
+            # 顺序不能反——补扣会推进 uses_used，先核对会读到偏旧的次数。
+            try:
+                _paid = license.pay_owed()
+                if _paid:
+                    app._debug("[启动] 已补扣历史欠账 %d 次" % _paid)
+            except Exception:
+                pass
             res = license.refresh_license_on_launch(APP_VERSION)
         except Exception:
             return

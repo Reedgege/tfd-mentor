@@ -398,15 +398,20 @@ def _update_uses_local(total, used):
         pass
 
 
-def consume_use(product=None, timeout=5):
+def consume_use(product=None, timeout=5, dry_run=False):
     """付费操作前：联网实时校验 + 次卡扣 1 次（/api/consume）。返回：
         'active'（放行）/ 'revoked' / 'expired' / 'offline'
 
     次卡用尽返回 'expired' 并落地失效；非次卡只校验不扣次数。
 
+    dry_run=True —— **只预检、不扣次、不写库**（中台 v1.1.38 契约）：
+        用于「修正【前】问一句额度够不够」，真正的扣次改到修正成功产出之后，
+        这样客户不会为一次失败的修正买单（详见 gui._settle_use）。
+
     v1.1.36：导师版此前**根本没有扣次路径**——本函数不存在，激活也不落
     uses_total/uses_used，导致次卡客户可无限次修正（¥20 次卡 ≈ 永久版）。
     现与学生版对齐；中台 /api/consume 按 product 查码，导师版用 tfd-mentor。
+    v1.1.38：扣次时机由「修正前」改为「修正成功后」，本函数新增 dry_run 预检。
     """
     lic = load_local_license()
     if not lic or not lic.get("code"):
@@ -414,11 +419,10 @@ def consume_use(product=None, timeout=5):
     card = lic.get("code")
     mc = get_machine_code()
     product = product or lic.get("product") or DEFAULT_PRODUCT
-    resp, err = _http_json(
-        CONSUME_PATH,
-        {"product": product, "code": card, "machine_code": mc},
-        timeout,
-    )
+    payload = {"product": product, "code": card, "machine_code": mc}
+    if dry_run:
+        payload["dry_run"] = 1
+    resp, err = _http_json(CONSUME_PATH, payload, timeout)
     if err:
         return "offline"
     if not resp or not resp.get("ok"):
@@ -430,11 +434,88 @@ def consume_use(product=None, timeout=5):
     if st == "expired":
         _mark_invalid_local(_classify_expired(resp))
         return "expired"
+    if dry_run:
+        # 预检：只回写次数快照用于界面显示，绝不推进 used（那是真扣次的事）
+        if resp.get("uses_total") is not None and lic.get("type") == "times":
+            _update_uses_local(resp.get("uses_total"), resp.get("uses_used"))
+        return "active"
     if resp.get("expires_at") is not None:
         _update_expire_local(resp.get("expires_at"))
     if resp.get("uses_total") is not None:
         _update_uses_local(resp.get("uses_total"), resp.get("uses_used"))
     return "active"
+
+
+# ---------------------------------------------------------------------------
+# 次卡「先给货、后收钱」的欠账兜底（v1.1.38）
+# ---------------------------------------------------------------------------
+# 扣次改到修正成功之后，就出现一个新口子：修正成功但**扣次那一刻离线**，
+# 客户已经拿到文件、中台却没扣到次数。为堵住它，扣次失败时在本机记一笔欠账
+# （owed + 乐观推进 uses_used），下次联网先补扣再放行。
+# 效果：客户不会为失败买单；离线白嫖也只是一次「欠着」，联网即补，不会真漏。
+# ---------------------------------------------------------------------------
+MAX_OWED = 5          # 欠账上限（异常情况下防止无限累积）
+PAY_OWED_MAX = 3      # 单次补扣最多笔数（防启动耗时过长）
+
+
+def get_owed():
+    """本机当前欠账笔数（联网补扣前先查这个）。"""
+    lic = load_local_license() or {}
+    try:
+        return max(0, int(lic.get("owed") or 0))
+    except Exception:
+        return 0
+
+
+def owe_use():
+    """扣次失败（离线/异常）：记一笔欠账 + 乐观推进本地次数。
+
+    乐观推进是必要的——否则离线状态下同一张次卡可以无限次修正（中台没扣到，
+    本地又还显示有余量）。推进后本机会判「已用完」，联网补扣成功前不再放行。
+    """
+    lic = load_local_license()
+    if not lic:
+        return
+    lic["owed"] = min(MAX_OWED, (lic.get("owed") or 0) + 1)
+    if lic.get("type") == "times":
+        total = lic.get("uses_total")
+        if isinstance(total, int):
+            lic["uses_used"] = min(total, (lic.get("uses_used") or 0) + 1)
+    _write_local_license(lic)
+
+
+def pay_owed(max_n=PAY_OWED_MAX):
+    """联网补扣欠账（启动时调用）。成功一笔清一笔；仍离线则保留欠账等下次。
+
+    返回实际补扣成功的笔数。
+    """
+    paid = 0
+    for _ in range(max(0, int(max_n))):
+        if get_owed() <= 0:
+            break
+        st = consume_use()
+        if st in ("revoked", "expired"):
+            break                     # 授权已失效：欠账无从补扣，交上层提示
+        if st == "offline":
+            break                     # 仍离线：保留欠账等下次
+        lic = load_local_license()
+        if not lic:
+            break
+        lic["owed"] = max(0, (lic.get("owed") or 0) - 1)
+        _write_local_license(lic)
+        paid += 1
+    return paid
+
+
+def _write_local_license(lic):
+    """写回本地授权文件（欠账/次数推进统一走这里，避免各处重复 try）。"""
+    try:
+        os.makedirs(LICENSE_DIR, exist_ok=True)
+        with open(LICENSE_FILE, "w", encoding="utf-8") as f:
+            json.dump(lic, f, ensure_ascii=False, indent=2)
+        return True
+    except Exception:
+        return False
 
 
 def is_revoked():
