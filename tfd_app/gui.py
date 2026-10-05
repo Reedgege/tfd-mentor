@@ -159,7 +159,7 @@ _FONT_BASE = {
     "F_DIALOG_TITLE": ("KaiTi", 14, "bold"),    # 弹窗标题（楷体）
     "F_ICON":       ("KaiTi", 12, "bold"),      # 印章图标（论 / 模，楷体朱砂）
 }
-APP_VERSION = "1.1.36"
+APP_VERSION = "1.1.37"
 
 # v1.0.31：绿色 zip 版由软件自建桌面快捷方式（win32com 已内置，客户零依赖、零黑框）。
 APP_SHORTCUT_NAME = "论文格式医生·导师版"   # 桌面快捷方式显示名
@@ -2188,7 +2188,11 @@ class App:
             return True                      # 正式版：不联网、不卡顿
         left = trial.trials_left()
         if left <= 0:
-            self.root.after(0, self._show_trial_exhausted)
+            # v1.1.37：此前写成 after(0, self._show_trial_exhausted) → 弹窗被排到主线程
+            # 执行，而该函数内部又是「after 排给主线程 + ev.wait 等待」的 worker 专用同步
+            # 写法，导致主线程自己等自己 → 界面硬卡 30 秒（试用用完点修正像死机）。
+            # _trial_ok 本身就在 worker 线程，直接调用才是它设计的用法（与学生版一致）。
+            self._show_trial_exhausted()
             return False
         if not self._ask_trial_confirm(left):
             return False
@@ -2197,7 +2201,7 @@ class App:
         if not trial.is_launch_checked():
             self.root.after(0, lambda: self._set_status("正在验证试用额度，请稍后…", MUTED))
         if not trial.consume_trial():
-            self.root.after(0, self._show_trial_exhausted)
+            self._show_trial_exhausted()   # 同上：worker 线程直接调用，勿再套 after(0, ...)
             return False
         self.root.after(0, lambda: self._set_status("验证通过，开始生成文档…", MUTED))
         return True
@@ -2956,7 +2960,10 @@ class App:
             self._open_folder(out_dir)
 
     def _ask_trial_confirm(self, left):
-        """修正前提示（worker 线程调用，主线程弹窗，Event 同步）。"""
+        """修正前提示（worker 线程调用，主线程弹窗，Event 同步）。
+
+        v1.1.37：与 _show_trial_exhausted 同样补齐主线程保护 —— 若将来被
+        after(0, ...) 误用，也不会变成「主线程等自己」的死锁。"""
         ev = threading.Event()
         box = {}
 
@@ -2969,17 +2976,28 @@ class App:
                 parent=self.root)
             ev.set()
 
+        if threading.current_thread() is threading.main_thread():
+            show()                           # 已在主线程：直接弹，不能 ev.wait（会自锁）
+            return bool(box.get("ok", False))
         self.root.after(0, show)
         ev.wait(30)
         return bool(box.get("ok", False))
 
     def _show_trial_exhausted(self):
-        """试用次数用完：主线程弹升级引导（公众号引导）。"""
-        ev = threading.Event()
-        box = {}
+        """试用次数用完：弹升级引导（小程序码 + 购买方式）。
 
-        def show():
-            box["v"] = self._modal(
+        **任意线程调用都安全**：
+          - worker 线程（正常路径）：弹窗排给主线程，本线程等 Event；
+          - 主线程：直接弹，绝不自锁。
+
+        v1.1.37 修复：此前内部固定「after(0) 排给主线程 + ev.wait(30) 等待」，
+        一旦被主线程调用（_trial_ok 曾写成 after(0, self._show_trial_exhausted)）
+        就变成主线程自己等自己 —— after 回调无人派发，界面硬卡 30 秒。
+        现补齐与 _run_on_main 同款的主线程判断，从函数层面彻底免疫。
+        """
+
+        def _dialog():
+            return self._modal(
                 "试用次数已用完",
                 "本机试用已用完（共 %d 次）。\n\n"
                 "正式版按所选卡种使用：永久 / 周 / 月卡在期限内随心使用，次卡每次修正联网扣减一次额度。"
@@ -2990,6 +3008,15 @@ class App:
                     "购买方式：微信扫描上方小程序码，或搜索小程序【%s】，付款后自动发码。\n"
                     "也可关注公众号【芦苇不熬夜】（ID：reedskill）或前往官网 reedskill.com 选购。\n"
                     "激活码相关的问题，欢迎在公众号留言，我们会尽快回复。" % MINIAPP_NAME))
+
+        if threading.current_thread() is threading.main_thread():
+            _dialog()                        # 已在主线程：直接弹，不能 ev.wait（会自锁）
+            return
+        box = {}
+        ev = threading.Event()
+
+        def show():
+            box["v"] = _dialog()
             ev.set()
 
         self.root.after(0, show)
