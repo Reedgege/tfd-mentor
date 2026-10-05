@@ -157,7 +157,7 @@ _FONT_BASE = {
     "F_DIALOG_TITLE": ("KaiTi", 14, "bold"),    # 弹窗标题（楷体）
     "F_ICON":       ("KaiTi", 12, "bold"),      # 印章图标（论 / 模，楷体朱砂）
 }
-APP_VERSION = "1.1.31"
+APP_VERSION = "1.1.32"
 
 # v1.0.31：绿色 zip 版由软件自建桌面快捷方式（win32com 已内置，客户零依赖、零黑框）。
 APP_SHORTCUT_NAME = "论文格式医生·导师版"   # 桌面快捷方式显示名
@@ -739,6 +739,12 @@ class App:
                         arrowsize=10, gripcount=0, width=9)
         style.map("Vertical.TScrollbar",
                   background=[("active", "#bfb39a"), ("pressed", ACCENT)])
+        # 激活窗「先试用」推荐按钮：朱砂红，首启时引导未购客户先体验
+        style.configure("Recommend.TButton", font=F_BTN, padding=(12, 10),
+                        background=CINNABAR, foreground="white")
+        style.map("Recommend.TButton",
+                  background=[("active", CINNABAR_D), ("disabled", "#c8a79f")],
+                  foreground=[("disabled", "#f5e9e6")])
 
     # ------------------------------------------------------------- layout
     def _build_widgets(self):
@@ -2885,9 +2891,9 @@ class App:
         def show():
             box["ok"] = messagebox.askyesno(
                 "试用版提示",
-                "当前为试用版（本机剩余 %d 次），可完整体验一次一键修正，输出即正式版格式"
-                "（无水印、可编辑）。\n\n"
-                "正式版不限次数修正、可一键交稿。\n\n是否继续？" % left,
+                "当前为试用版（本机剩余 %d 次），可完整体验一次格式修正，输出即正式版效果。\n\n"
+                "正式版按所选卡种使用：永久 / 周 / 月卡在期限内随心使用，次卡每次修正联网扣减一次额度。\n\n"
+                "是否继续？" % left,
                 parent=self.root)
             ev.set()
 
@@ -2903,12 +2909,12 @@ class App:
         def show():
             box["v"] = self._modal(
                 "试用次数已用完",
-                "本机试用已满 %d 次。\n\n"
-                "正式版激活后：不限次数修正、输出无水印文档、一键交稿。\n\n"
-                "推荐购买：微信扫上方小程序码，或搜索小程序【%s】，付款后自动发码。\n"
-                "也可关注公众号【芦苇不熬夜】（ID：reedskill）或前往官网 reedskill.com 购买。\n"
-                "激活码购买与激活问题，公众号留言即可。" % (trial.TRIAL_LIMIT, MINIAPP_NAME),
-                [("ok", "知道了")], image_path=MINIAPP_QRCODE)
+                "本机试用已用完（共 %d 次）。\n\n"
+                "正式版按所选卡种使用：永久 / 周 / 月卡在期限内随心使用，次卡每次修正联网扣减一次额度。\n\n"
+                "购买方式：微信扫描上方小程序码，或搜索小程序【%s】，付款后自动发码。\n"
+                "也可关注公众号【芦苇不熬夜】（ID：reedskill）或前往官网 reedskill.com 选购。\n"
+                "激活码相关的问题，欢迎在公众号留言，我们会尽快回复。" % (trial.TRIAL_LIMIT, MINIAPP_NAME),
+                [("ok", "知道了")], image_path=MINIAPP_QRCODE, image_on_top=True)
             ev.set()
 
         self.root.after(0, show)
@@ -3043,7 +3049,7 @@ class App:
         self._refresh_wizard()
         self._show_fix_done(dst, chk_path, rep_path)
 
-    def _modal(self, title, text, buttons, image_path=None):
+    def _modal(self, title, text, buttons, image_path=None, image_on_top=False):
         result = {"v": None}
         top = tk.Toplevel(self.root)
         top.title(title)
@@ -3052,22 +3058,30 @@ class App:
         top.grab_set()
         top.geometry("+%d+%d" % (self.root.winfo_rootx() + 140,
                                  self.root.winfo_rooty() + 120))
+
+        def _place_qr():
+            # 试用用完窗口放小程序购买码；资源缺失自动跳过，不影响其余内容
+            if image_path and os.path.isfile(image_path):
+                try:
+                    _img = tk.PhotoImage(file=image_path)
+                    _img = _img.subsample(max(1, round(_img.width() / 130)))
+                    _qr = tk.Frame(top, bg=PAPER)
+                    _qr.pack(pady=(0, 6))
+                    _qrlbl = tk.Label(_qr, image=_img, bg=PAPER)
+                    _qrlbl.image = _img   # 保留引用，防被 GC 后图片消失
+                    _qrlbl.pack()
+                    tk.Label(_qr, text="微信扫描上方小程序码，即可获取激活码",
+                             bg=PAPER, fg=MUTED, font=F_SMALL).pack(pady=(6, 0))
+                except Exception:
+                    pass
+
+        # image_on_top=True 时二维码置于文案上方（与「扫描上方小程序码」表述一致）
+        if image_on_top:
+            _place_qr()
         tk.Label(top, text=text, bg=PAPER, fg=BODY, font=F_BODY, justify="left",
                  wraplength=480).pack(padx=24, pady=(20, 14))
-        # v1.x：可选二维码（如试用用完窗口放小程序购买码）；资源缺失自动跳过，不影响其余内容
-        if image_path and os.path.isfile(image_path):
-            try:
-                _img = tk.PhotoImage(file=image_path)
-                _img = _img.subsample(max(1, round(_img.width() / 130)))
-                _qr = tk.Frame(top, bg=PAPER)
-                _qr.pack(pady=(0, 6))
-                _qrlbl = tk.Label(_qr, image=_img, bg=PAPER)
-                _qrlbl.image = _img   # 保留引用，防被 GC 后图片消失
-                _qrlbl.pack()
-                tk.Label(_qr, text="微信扫一扫，直接购买激活码",
-                         bg=PAPER, fg=MUTED, font=F_SMALL).pack(pady=(6, 0))
-            except Exception:
-                pass
+        if not image_on_top:
+            _place_qr()
         fr = tk.Frame(top, bg=PAPER)
         fr.pack(pady=(0, 18))
         for key, label in buttons:
@@ -3569,9 +3583,9 @@ def show_activation(root, show_trial=True):
     # v1.3.58：试用入口放在显眼位置（激活按钮正下方，便于未购买客户先体验）
     # v1.3.66：仅启动时首次弹窗显示；从主界面激活入口打开时客户已在试用模式，无需再显示
     if show_trial:
-        ttk.Button(top, text="还没有激活码？先试用（免费 %d 次）" % trial.TRIAL_LIMIT, style="Ghost.TButton",
+        ttk.Button(top, text="先免费试用（推荐）", style="Recommend.TButton",
                    command=lambda: (result.update(v="trial"), top.destroy())).pack(pady=(4, 2))
-        tk.Label(top, text="试用版可完整体验一次一键修正，输出即正式版格式（无水印、可编辑）；激活后不限次数一键交稿。",
+        tk.Label(top, text="试用版可完整体验一次格式修正，输出即正式版效果；激活后按所选卡种安心使用——永久 / 周 / 月卡在期限内随心使用，次卡按次扣减额度。",
                  bg=PAPER, fg=MUTED, font=F_FOOT, wraplength=540).pack(pady=(0, 6))
 
     tk.Label(top, text="— 以下为特殊情形使用 —", bg=PAPER, fg=MUTED, font=F_SMALL).pack(pady=(8, 4))
@@ -3867,8 +3881,8 @@ def show_help(parent):
          "非必带，但带批注的学校官方模板效果最佳。软件定格式时，批注说明优先于样式定义："
          "批注有明确要求则遵批注，无批注则读样式定义，样式亦无则以通用规范兜底。"),
         ("Q3 · 试用版与正式版有何区别？卡片有哪些种类？",
-         "试用版：免费试用 1 次，输出即正式版格式（无水印、可编辑）。\n"
-         "正式版：无水印、可编辑、可保存。卡片共 4 种：\n"
+         "试用版：免费试用 1 次，输出即正式版格式，文档可直接编辑。\n"
+         "正式版：文档均可正常编辑保存，按所选卡种使用。卡片共 4 种：\n"
          "· 永久卡 — 一次付费终身可用，激活后完全离线；\n"
          "· 周卡 / 月卡 — 期限内不限次数使用，到期后续费即可继续；\n"
          "· 次卡 — 按次计费，每修正一次扣一次次数（需联网扣次）。"),
