@@ -54,6 +54,7 @@ DEFAULT_PRODUCT = "tfd-mentor"             # 导师版产品代号（中台建�
 HEARTBEAT_INTERVAL_DAYS = 3                # 心跳间隔（天）；仅联网 + 服务端 revoked 才锁
 ACTIVATE_PATH = "/api/activate"
 HEARTBEAT_PATH = "/api/heartbeat"
+CONSUME_PATH = "/api/consume"   # v1.1.36：付费操作扣次 + 实时校验（导师版次卡此前无此路径）
 
 # 导师版接受的本地授权 product 取值：新版 "tfd-mentor" 与旧版 "mentor" 都放行，
 # 避免升级后旧授权文件（product="mentor"）突然失效。其他 product 一律拒绝。
@@ -247,6 +248,9 @@ def activate_online(card, machine_code, product=DEFAULT_PRODUCT, timeout=30):
         "ok": True,
         "type": resp.get("type"),
         "expires_at": resp.get("expires_at"),
+        # v1.1.36：次卡总次数/已用次数必须带回来，否则本地无从显示余量、也无从拦截用尽
+        "uses_total": resp.get("uses_total"),
+        "uses_used": resp.get("uses_used"),
         "error": "验证通过",
     }
 
@@ -347,6 +351,92 @@ def _update_expire_local(exp):
         pass
 
 
+def _classify_expired(resp):
+    """区分失效原因：次卡用尽 → uses_exhausted；否则 expired。"""
+    if resp.get("uses_total") is not None and (resp.get("uses_used") or 0) >= resp.get("uses_total"):
+        return "uses_exhausted"
+    return "expired"
+
+
+def _mark_invalid_local(reason="revoked"):
+    """把本地授权标记为失效（下次 check_local_valid 直接判 False）。
+
+    reason: revoked（撤销/退款）/ expired（到期）/ uses_exhausted（次卡用尽）。
+    """
+    lic = load_local_license()
+    if not lic:
+        return
+    lic["status"] = "revoked"
+    lic["lock_reason"] = reason
+    try:
+        os.makedirs(LICENSE_DIR, exist_ok=True)
+        with open(LICENSE_FILE, "w", encoding="utf-8") as f:
+            json.dump(lic, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
+def get_lock_reason():
+    """返回本地失效原因（revoked/expired/uses_exhausted），无则 None。"""
+    lic = load_local_license()
+    if not lic:
+        return None
+    return lic.get("lock_reason")
+
+
+def _update_uses_local(total, used):
+    """次卡：回写本地剩余次数（供界面显示"剩 N 次"）。"""
+    lic = load_local_license()
+    if not lic:
+        return
+    lic["uses_total"] = total
+    lic["uses_used"] = used
+    try:
+        with open(LICENSE_FILE, "w", encoding="utf-8") as f:
+            json.dump(lic, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
+def consume_use(product=None, timeout=5):
+    """付费操作前：联网实时校验 + 次卡扣 1 次（/api/consume）。返回：
+        'active'（放行）/ 'revoked' / 'expired' / 'offline'
+
+    次卡用尽返回 'expired' 并落地失效；非次卡只校验不扣次数。
+
+    v1.1.36：导师版此前**根本没有扣次路径**——本函数不存在，激活也不落
+    uses_total/uses_used，导致次卡客户可无限次修正（¥20 次卡 ≈ 永久版）。
+    现与学生版对齐；中台 /api/consume 按 product 查码，导师版用 tfd-mentor。
+    """
+    lic = load_local_license()
+    if not lic or not lic.get("code"):
+        return "offline"
+    card = lic.get("code")
+    mc = get_machine_code()
+    product = product or lic.get("product") or DEFAULT_PRODUCT
+    resp, err = _http_json(
+        CONSUME_PATH,
+        {"product": product, "code": card, "machine_code": mc},
+        timeout,
+    )
+    if err:
+        return "offline"
+    if not resp or not resp.get("ok"):
+        return "offline"
+    st = resp.get("status")
+    if st == "revoked":
+        _mark_invalid_local("revoked")
+        return "revoked"
+    if st == "expired":
+        _mark_invalid_local(_classify_expired(resp))
+        return "expired"
+    if resp.get("expires_at") is not None:
+        _update_expire_local(resp.get("expires_at"))
+    if resp.get("uses_total") is not None:
+        _update_uses_local(resp.get("uses_total"), resp.get("uses_used"))
+    return "active"
+
+
 def is_revoked():
     """本地是否已标记撤销（心跳检测到 revoked 后落地）。"""
     lic = load_local_license()
@@ -356,8 +446,14 @@ def is_revoked():
 
 
 def save_local_license(card, machine_code, permanent=True, lic_type=None,
-                       expires_at=None, product=None):
-    """激活成功后写本地授权（日常离线用）。"""
+                       expires_at=None, product=None, uses_total=None,
+                       uses_used=None):
+    """激活成功后写本地授权（日常离线用）。
+
+    v1.1.36：补 uses_total / uses_used——此前激活只传 (card, mc)，
+    服务端返回的类型/到期/次数全被丢弃，本地恒为 permanent=True，
+    月卡永不过期、次卡永不扣次。
+    """
     os.makedirs(LICENSE_DIR, exist_ok=True)
     data = {
         "machine_code": machine_code,
@@ -369,6 +465,8 @@ def save_local_license(card, machine_code, permanent=True, lic_type=None,
         "type": lic_type,
         "product": product or DEFAULT_PRODUCT,
         "status": "active",
+        "uses_total": uses_total,
+        "uses_used": uses_used,
     }
     with open(LICENSE_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
@@ -680,7 +778,8 @@ def refresh_license_on_launch(current_version=""):
 
     st = resp.get("status")
     if st in ("revoked", "expired"):
-        _mark_revoked_local()
+        # v1.1.36：区分失效原因（到期 / 次卡用尽 / 撤销），供锁定窗说准话
+        _mark_invalid_local("revoked" if st == "revoked" else _classify_expired(resp))
         _launch_verified_active = False
         return {"checked": True, "activated": False, "revoked": True,
                 "locked": True, "offline": False,
@@ -688,9 +787,11 @@ def refresh_license_on_launch(current_version=""):
                 "version": _version_info_from(
                     hb=resp, public=version, current_version=current_version)}
 
-    # active：刷新本地过期时间 + 置位可信标志（之后修正免联网）
+    # active：刷新本地过期时间 / 次卡余量 + 置位可信标志（之后修正免联网）
     if resp.get("expires_at") is not None:
         _update_expire_local(resp.get("expires_at"))
+    if resp.get("uses_total") is not None:
+        _update_uses_local(resp.get("uses_total"), resp.get("uses_used"))
     _launch_verified_active = True
     return {"checked": True, "activated": True, "revoked": False,
             "locked": False, "offline": False, "network_unreachable": False,

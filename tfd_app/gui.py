@@ -159,7 +159,7 @@ _FONT_BASE = {
     "F_DIALOG_TITLE": ("KaiTi", 14, "bold"),    # 弹窗标题（楷体）
     "F_ICON":       ("KaiTi", 12, "bold"),      # 印章图标（论 / 模，楷体朱砂）
 }
-APP_VERSION = "1.1.35"
+APP_VERSION = "1.1.36"
 
 # v1.0.31：绿色 zip 版由软件自建桌面快捷方式（win32com 已内置，客户零依赖、零黑框）。
 APP_SHORTCUT_NAME = "论文格式医生·导师版"   # 桌面快捷方式显示名
@@ -2632,10 +2632,42 @@ class App:
         if saved:
             self._show_check_done(dst)
 
+    def _guard_license(self):
+        """付费操作前守卫：本地失效立即拦；联网实时校验（次卡扣次、其他卡只校验）。
+        返回 True=放行；False=已拦截。
+
+        v1.1.36：导师版此前**没有这道门**——次卡从不扣次（¥20 次卡可无限用）。
+        现与学生版对齐：次卡必须联网扣次（离线即拦）；永久/月卡启动已核验则免联网。
+        """
+        if license.is_revoked():
+            self.root.after(0, self._handle_revoked)
+            return False
+        _lic = license.load_local_license() or {}
+        # 启动已一次性核验成功且非次卡 → 免联网直接放行（次卡必须扣次，不在此列）
+        if license.is_launch_verified() and _lic.get("type") != "times":
+            return True
+        if _lic.get("type") == "times":
+            self._set_status("正在验证激活额度，请稍后…", MUTED)
+        st = license.consume_use()
+        if st in ("revoked", "expired"):
+            self.root.after(0, self._handle_revoked)
+            return False
+        if st == "offline":
+            # 次卡：离线即扣次失败，必须拦截（其余卡种离线可正常使用）
+            _lic = license.load_local_license()
+            if (_lic or {}).get("type") == "times":
+                self.root.after(0, lambda: messagebox.showwarning(
+                    "需要联网", "次卡需在联网状态下扣减次数。\n请连接网络后重试。"))
+                return False
+        return True
+
     def _do_fix(self, src, docx_path, dst):
         # 授权被后台撤销（退款锁死）：直接拦截，禁止继续修正
         if license.is_revoked():
             self.root.after(0, self._handle_revoked)
+            return False
+        # v1.1.36：次卡联网扣次 + 实时校验（防退款撤销 / 到期 / 次卡用尽）
+        if not self._guard_license():
             return False
         # 第③步修正：按当前 _fix_mode 产出（both=批注副本+已修正版各一套，不重跑论文）。
         # 产出先落临时目录，待主线程 _export_fix 让客户选保存位置；结果存入 self._fix_outs。
@@ -3424,15 +3456,18 @@ class App:
             self._set_status("已进入试用模式", MUTED)
 
     def _handle_revoked(self):
-        """授权被后台撤销（退款锁死）：锁定软件，禁止继续修正。"""
+        """授权失效（撤销退款 / 到期 / 次卡用尽）：锁定软件，禁止继续修正。"""
         self._licensed = False
         self._update_trial_badge()
-        self._set_status("授权已失效（可能已退款），软件已锁定", ERRC)
-        self._modal(
-            "授权已失效",
-            "您的授权已被后台撤销（可能因退款）。\n\n"
-            "软件已锁定，无法继续修正论文。\n如需继续使用，请联系客服：hi@reedskill.com。",
-            [("ok", "知道了")])
+        try:
+            reason = license.get_lock_reason()
+        except Exception:
+            reason = None
+        title, body = _revoked_message(reason)
+        self._set_status(("次数已用完，软件已锁定" if reason == "uses_exhausted"
+                          else "授权已到期，软件已锁定" if reason == "expired"
+                          else "授权已失效，软件已锁定"), ERRC)
+        self._modal(title, body, [("ok", "知道了")])
 
     # ------------------------------------------------------------ 意见反馈
     # 提交到中台 /api/feedback → 邮件（正文会标「导师版」来源）；断网/失败回落 mailto:。
@@ -3612,6 +3647,22 @@ class App:
 _APP_REF = None  # App 实例引用，在 App.__init__ 中赋值
 
 
+def _revoked_message(reason=None):
+    """按失效原因返回 (标题, 正文)。v1.1.36：次卡用尽 / 到期要说准，别一律说"退款"。"""
+    if reason == "uses_exhausted":
+        return ("次数已用完",
+                "您的次卡次数已用完，软件已锁定。\n\n"
+                "如需继续使用，请续费或联系客服：hi@reedskill.com。")
+    if reason == "expired":
+        return ("授权已到期",
+                "您的授权已到期，软件已锁定。\n\n"
+                "如需继续使用，请续费或联系客服：hi@reedskill.com。")
+    return ("授权已失效",
+            "您的授权已被后台撤销（可能因退款）。\n\n"
+            "软件已锁定，无法继续修正论文。\n"
+            "如需继续使用，请联系客服：hi@reedskill.com。")
+
+
 def _on_license_revoked():
     """心跳线程发现 revoked：通过 after(0) 切回主线程处理，避免后台线程碰 Tk。"""
     if _APP_REF is not None:
@@ -3682,21 +3733,25 @@ def show_activation(root, show_trial=True):
             try:
                 mc = license.get_machine_code()
                 license._log("gui: 开始联网验证 card=%s mc=%s" % (card, mc))
-                ok, _days, note = license.verify_via_kami(card, mc)
+                # v1.1.36：改用 activate_online 拿完整 info（卡种 / 到期 / 次数），
+                # 旧 verify_via_kami 只回 (ok, days, note)，把类型与次数全丢了。
+                info = license.activate_online(card, mc)
+                ok = info.get("ok", False)
+                note = info.get("error") or "验证通过"
                 license._log("gui: 联网验证返回 ok=%s note=%s" % (ok, note))
-                q.put(("done", ok, note, mc))
+                q.put(("done", ok, note, mc, info))
             except Exception:
                 import traceback
                 tb = traceback.format_exc()
                 license._log("gui: 激活线程异常\n%s" % tb)
-                q.put(("done", False, "激活过程出错，请重试或联系客服", ""))
+                q.put(("done", False, "激活过程出错，请重试或联系客服", "", {}))
 
         threading.Thread(target=work, daemon=True).start()
 
         def poll():
             # 主线程轮询队列（线程安全），拿到结果才更新界面
             try:
-                _kind, ok, note, mc = q.get_nowait()
+                _kind, ok, note, mc, info = q.get_nowait()
             except queue.Empty:
                 if time.time() - start_t > 120:   # UI 看门狗：物理上不可能无限转圈
                     btn_activate.config(state="normal")
@@ -3707,7 +3762,18 @@ def show_activation(root, show_trial=True):
                 return
             btn_activate.config(state="normal")
             if ok:
-                license.save_local_license(card, mc)
+                # v1.1.36：把服务端返回的卡种 / 到期时间 / 次数完整落盘——
+                # 此前只存 (card, mc)，本地恒为 permanent=True，月卡永不过期、
+                # 次卡永不扣次，徽标也永远显示"永久版"。
+                license.save_local_license(
+                    card, mc,
+                    permanent=(info.get("type") == "lifetime"),
+                    lic_type=info.get("type"),
+                    expires_at=info.get("expires_at"),
+                    product=license.DEFAULT_PRODUCT,
+                    uses_total=info.get("uses_total"),
+                    uses_used=info.get("uses_used"),
+                )
                 license._log("gui: 授权已写入本机")
                 # 启动后台心跳：联网时若授权被撤销（退款），自动锁死
                 license.start_heartbeat(
