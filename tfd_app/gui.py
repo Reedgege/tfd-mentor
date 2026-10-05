@@ -108,6 +108,34 @@ CINNABAR= "#9e4233"   # 朱砂（主按钮）
 CINNABAR_D = "#8a382b"
 OKC     = "#5f7d5c"   # 完成（墨绿）
 ERRC    = "#a0402f"   # 出错（朱红）
+
+# ---------------------------------------------------------------------------
+# 滚轮与滚动条（v1.1.30：统一手感 + 视觉）
+# ---------------------------------------------------------------------------
+# Canvas 的 yview_scroll(n, "units") 里 1 unit = -yscrollincrement 像素；该值为 0（默认）
+# 时步长由平台决定且极小，表现就是「一格几乎不动 / 慢慢挪半天」，客户反馈的
+# 「滑轮效果不好」即源于此。这里显式钉死步长，一格 = WHEEL_INCREMENT × WHEEL_UNITS 像素。
+WHEEL_INCREMENT = 20   # Canvas yscrollincrement（像素/unit）
+WHEEL_UNITS = 2        # 每格滚轮滚几个 unit → 一格 40px，接近三行文字
+
+
+def _wheel_steps(delta):
+    """滚轮 delta → yview_scroll 的 units 数（**向下为正**，与 Tk 一致）。
+
+    修两个老问题：
+      1. 老写法 ``int(-1 * (delta / 120))``：精密触控板给 ±40/±100 等非 120 倍率时
+         被 int() 截断成 0 → **完全滚不动**（滚下去滚不回来的直接原因之一）；
+      2. 步长为 0 时不做无意义的滚动调用。
+    delta<0（向下滚）→ 返回正数；delta>0（向上滚）→ 返回负数。
+    """
+    d = int(delta or 0)
+    if not d:
+        return 0
+    notches = abs(d) / 120.0
+    if notches < 1:
+        notches = 1                      # 小数倍率至少算一格，保证滚得动
+    n = int(round(notches))
+    return WHEEL_UNITS * n if d < 0 else -WHEEL_UNITS * n
 RUN     = ACCENT      # 处理中（黛蓝）
 
 # 字体：标题 / 章节 / 状态用楷体（KaiTi，文艺调性），正文 / 按钮 / 页脚用微软雅黑（清晰）
@@ -702,6 +730,15 @@ class App:
                         background=PANEL, foreground=ACCENT)
         style.map("Ghost.TButton",
                   background=[("active", "#efe9db"), ("disabled", "#f4f0e6")])
+        # 滚动条：更窄（默认约 15~16px → 10px 上下）、配色贴宣纸底 + 黛蓝箭头。
+        # 滑块用暖灰米色（与 PAPER 同色系），不再是抢眼的亮灰；去掉滑块上的抓握纹，
+        # 细条上更干净。
+        style.configure("Vertical.TScrollbar",
+                        background="#d5ccb8", troughcolor=PAPER,
+                        bordercolor=PAPER, arrowcolor=ACCENT,
+                        arrowsize=10, gripcount=0, width=9)
+        style.map("Vertical.TScrollbar",
+                  background=[("active", "#bfb39a"), ("pressed", ACCENT)])
 
     # ------------------------------------------------------------- layout
     def _build_widgets(self):
@@ -754,8 +791,10 @@ class App:
         # 下方页脚 / 状态栏始终固定可见（此前内容超高会把他俩挤出窗口底部）。
         body = tk.Frame(self.root, bg=PAPER)
         body.pack(fill="both", expand=True, padx=20, pady=14)
-        self._body_cv = tk.Canvas(body, bg=PAPER, highlightthickness=0)
-        _sb = ttk.Scrollbar(body, orient="vertical", command=self._body_cv.yview)
+        self._body_cv = tk.Canvas(body, bg=PAPER, highlightthickness=0,
+                                  yscrollincrement=WHEEL_INCREMENT)
+        _sb = ttk.Scrollbar(body, orient="vertical", command=self._body_cv.yview,
+                            style="Vertical.TScrollbar")
         self._body_cv.configure(yscrollcommand=_sb.set)
         _sb.pack(side="right", fill="y")
         self._body_cv.pack(side="left", fill="both", expand=True)
@@ -790,13 +829,26 @@ class App:
         main.bind("<Configure>", _sync_body)
         self._body_cv.bind("<Configure>", _sync_body)
 
-        def _on_wheel(e):
-            # 焦点在可自行滚动的文本框内时不拦截，避免双重滚动
-            if isinstance(e.widget, tk.Text):
-                return
-            self._body_cv.yview_scroll(int(-1 * (e.delta / 120)), "units")
+        # 自身能滚的控件（正文框/列表/别的画布）不抢主区滚动，避免"滚了没反应或滚错地方"
+        _SELF_SCROLLING = (tk.Text, tk.Listbox, tk.Canvas)
 
-        self.root.bind_all("<MouseWheel>", _on_wheel)
+        def _on_wheel(e):
+            w = e.widget
+            if isinstance(w, _SELF_SCROLLING) and w is not self._body_cv:
+                return
+            steps = _wheel_steps(getattr(e, "delta", 0))
+            if steps:
+                # 滚动前先按当前真实内容刷新一次滚动范围：内容变化（报告区变长/收起）
+                # 后若 scrollregion 滞后，向上滚会被上界"顶住"，表现就是滚不回去。
+                try:
+                    self._body_cv.configure(scrollregion=self._body_cv.bbox("all"))
+                except Exception:
+                    pass
+                self._body_cv.yview_scroll(steps, "units")
+
+        if not getattr(self, "_wheel_bound", False):
+            self.root.bind_all("<MouseWheel>", _on_wheel)
+            self._wheel_bound = True
 
         # 页脚（两行版权，贴底）
         footer = tk.Frame(self.root, bg=PAPER)
@@ -1465,8 +1517,10 @@ class App:
         # 滚动区
         body = tk.Frame(top, bg=PAPER)
         body.pack(fill="both", expand=True, padx=16, pady=2)
-        canvas = tk.Canvas(body, bg=PAPER, highlightthickness=0)
-        vbar = ttk.Scrollbar(body, orient="vertical", command=canvas.yview)
+        canvas = tk.Canvas(body, bg=PAPER, highlightthickness=0,
+                           yscrollincrement=WHEEL_INCREMENT)
+        vbar = ttk.Scrollbar(body, orient="vertical", command=canvas.yview,
+                             style="Vertical.TScrollbar")
         form = tk.Frame(canvas, bg=PAPER)
         form.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
         canvas.create_window((0, 0), window=form, anchor="nw")
@@ -1475,8 +1529,15 @@ class App:
         vbar.pack(side="right", fill="y")
 
         def _wheel(e):
-            d = getattr(e, "delta", 0) or 0
-            canvas.yview_scroll(-3 if d > 0 else 3, "units")
+            # Button-4=向上、Button-5=向下（老写法两个方向都滚成向下，方向是反的）
+            if getattr(e, "num", None) == 4:
+                canvas.yview_scroll(-WHEEL_UNITS, "units")
+            elif getattr(e, "num", None) == 5:
+                canvas.yview_scroll(WHEEL_UNITS, "units")
+            else:
+                steps = _wheel_steps(getattr(e, "delta", 0))
+                if steps:
+                    canvas.yview_scroll(steps, "units")
         for w in (canvas, form):
             w.bind("<MouseWheel>", _wheel)
             w.bind("<Button-4>", _wheel)
@@ -2329,8 +2390,10 @@ class App:
         # 表单区：canvas 与滚动条同在一个 frame 内，滚动条贴右侧整个高度（不沉到右下角）
         form_area = tk.Frame(top, bg=PAPER)
         form_area.pack(fill="both", expand=True, padx=(18, 0), pady=3)
-        canvas = tk.Canvas(form_area, bg=PAPER, highlightthickness=0)
-        vbar = ttk.Scrollbar(form_area, orient="vertical", command=canvas.yview)
+        canvas = tk.Canvas(form_area, bg=PAPER, highlightthickness=0,
+                           yscrollincrement=WHEEL_INCREMENT)
+        vbar = ttk.Scrollbar(form_area, orient="vertical", command=canvas.yview,
+                             style="Vertical.TScrollbar")
         form = tk.Frame(canvas, bg=PAPER)
         form.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
         canvas.create_window((0, 0), window=form, anchor="nw")
@@ -2340,11 +2403,15 @@ class App:
 
         # v1.3.76：确认页表单滚动区同样支持滚轮（15 个字段，鼠标翻页更顺手）
         def _form_wheel(e):
-            d = getattr(e, "delta", 0) or 0
-            step = -3 if d > 0 else 3
-            if abs(d) >= 120:
-                step = -int(d / 120) * 3
-            canvas.yview_scroll(step, "units")
+            # Button-4=向上、Button-5=向下（老写法两个方向都滚成向下，方向是反的）
+            if getattr(e, "num", None) == 4:
+                canvas.yview_scroll(-WHEEL_UNITS, "units")
+            elif getattr(e, "num", None) == 5:
+                canvas.yview_scroll(WHEEL_UNITS, "units")
+            else:
+                steps = _wheel_steps(getattr(e, "delta", 0))
+                if steps:
+                    canvas.yview_scroll(steps, "units")
         for w in (canvas, form):
             w.bind("<MouseWheel>", _form_wheel)
             w.bind("<Button-4>", _form_wheel)
@@ -3586,8 +3653,10 @@ def _site_label(parent, text=OFFICIAL_SITE_TEXT, bg=PAPER):
 # ---------------------------------------------------------------------------
 def _scroll_frame(parent, bg=PAPER):
     """可滚动容器：Canvas + 常驻滚动条，滚轮/拖拽/箭头均可用，内部宽度跟随画布。"""
-    cv = tk.Canvas(parent, bg=bg, highlightthickness=0)
-    sb = ttk.Scrollbar(parent, orient="vertical", command=cv.yview)
+    cv = tk.Canvas(parent, bg=bg, highlightthickness=0,
+                   yscrollincrement=WHEEL_INCREMENT)
+    sb = ttk.Scrollbar(parent, orient="vertical", command=cv.yview,
+                       style="Vertical.TScrollbar")
     inner = tk.Frame(cv, bg=bg)
     win = cv.create_window((0, 0), window=inner, anchor="nw")
 
@@ -3605,16 +3674,15 @@ def _scroll_frame(parent, bg=PAPER):
         _sync()
 
     def _wheel(event):
+        # Button-4=向上、Button-5=向下（老写法两个方向都滚成向下，方向是反的）
         if getattr(event, "num", None) == 4:
-            cv.yview_scroll(-3, "units")
+            cv.yview_scroll(-WHEEL_UNITS, "units")
         elif getattr(event, "num", None) == 5:
-            cv.yview_scroll(3, "units")
+            cv.yview_scroll(WHEEL_UNITS, "units")
         else:
-            d = getattr(event, "delta", 0) or 0
-            step = -3 if d > 0 else 3
-            if abs(d) >= 120:
-                step = -int(d / 120) * 3
-            cv.yview_scroll(step, "units")
+            steps = _wheel_steps(getattr(event, "delta", 0))
+            if steps:
+                cv.yview_scroll(steps, "units")
 
     inner.bind("<Configure>", _sync)
     cv.bind("<Configure>", _on_cv)
