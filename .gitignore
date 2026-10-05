@@ -46,3 +46,14 @@ public_key.pem
 
 # UI 改造参考包（临时，绝不入库）
 _ui_ref/
+
+# Windows 保留设备名文件（如误用 `>nul` 重定向产生的 0 字节文件）
+# 症状：git add -A 报 "invalid path 'nul'" 并 fatal；资源管理器 / 普通 del 也删不掉。
+# 对交付无影响：build.py 只按 REQUIRED_ASSETS 白名单 include，
+# installer.nsi 只从 dist/ 递归取文件，本文件不在二者范围内。
+# 想彻底清掉：在 CMD（不是 PowerShell）里执行 del "\\?\D:\<完整路径>\nul"
+nul
+con
+prn
+aux
+NUL
