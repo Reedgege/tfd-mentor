@@ -157,7 +157,7 @@ _FONT_BASE = {
     "F_DIALOG_TITLE": ("KaiTi", 14, "bold"),    # 弹窗标题（楷体）
     "F_ICON":       ("KaiTi", 12, "bold"),      # 印章图标（论 / 模，楷体朱砂）
 }
-APP_VERSION = "1.1.30"
+APP_VERSION = "1.1.31"
 
 # v1.0.31：绿色 zip 版由软件自建桌面快捷方式（win32com 已内置，客户零依赖、零黑框）。
 APP_SHORTCUT_NAME = "论文格式医生·导师版"   # 桌面快捷方式显示名
@@ -3674,6 +3674,11 @@ def _scroll_frame(parent, bg=PAPER):
         _sync()
 
     def _wheel(event):
+        # 滚动前先按当前内容刷新滚动范围，避免内容变化后 bbox 滞后导致"滚不动/滚不回去"
+        try:
+            cv.configure(scrollregion=cv.bbox("all"))
+        except Exception:
+            pass
         # Button-4=向上、Button-5=向下（老写法两个方向都滚成向下，方向是反的）
         if getattr(event, "num", None) == 4:
             cv.yview_scroll(-WHEEL_UNITS, "units")
@@ -3683,6 +3688,8 @@ def _scroll_frame(parent, bg=PAPER):
             steps = _wheel_steps(getattr(event, "delta", 0))
             if steps:
                 cv.yview_scroll(steps, "units")
+        # 阻断根窗全局 bind_all 抢滚主窗：本弹窗滚动为权威动作，且避免一次滚轮触发多次滚动
+        return "break"
 
     inner.bind("<Configure>", _sync)
     cv.bind("<Configure>", _on_cv)
@@ -3694,7 +3701,11 @@ def _scroll_frame(parent, bg=PAPER):
     # 兜底：窗口显示、内容布局稳定后多次刷新滚动范围（滑块大小/上下界限由此决定）
     parent.after(150, _sync)
     parent.after(500, _sync)
-    for w in (cv, inner):
+    # 关键：把滚轮绑到弹窗顶层 parent（Toplevel）。非 modal 弹窗下，根窗的全局
+    # bind_all("<MouseWheel>") 也会对弹窗内的滚轮生效并去滚背后的主窗；把绑定放到
+    # bindtag 链里先于 "all" 的顶层位置，配合 _wheel 返回 "break"，可彻底拦截全局抢滚，
+    # 保证本弹窗滚动优先且唯一。cv/inner 的绑定兜底各种悬停位置。
+    for w in (parent, cv, inner):
         w.bind("<MouseWheel>", _wheel)
         w.bind("<Button-4>", _wheel)
         w.bind("<Button-5>", _wheel)
