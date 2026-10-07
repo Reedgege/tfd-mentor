@@ -16,16 +16,18 @@ import json
 import hmac
 import hashlib
 
-from .license import LICENSE_DIR, get_machine_code  # 相对导入：与 gui 同款，打包后可用
+from .license import LICENSE_DIR, get_machine_code, DEFAULT_PRODUCT  # 相对导入：与 gui 同款，打包后可用
 
 # 试用总次数（可调：卖家用）。2026-10 老板定：1 次免费试用，用完弹购买引导；试用不带水印（与海外版对齐）。
 TRIAL_LIMIT = 1
 
-TRIAL_FILE = os.path.join(LICENSE_DIR, "trial.json")
+# 本地试用计次文件按产品分文件：学生/导师各自独立（trial_tfd-student.json / trial_tfd-mentor.json），
+# 避免共用同一 trial.json + 不同盐值导致「先跑一版写文件、再开另一版读到异盐 sig 被判 BAD 锁死 0 次」
+# 的互相污染。中台本就按 product×machine 分表，本地改名零风险（重名用户「已试用」由中台兜底，不变白嫖）。
+TRIAL_FILE = os.path.join(LICENSE_DIR, "trial_%s.json" % DEFAULT_PRODUCT)
 
-# 试用计数封印盐：导师版独立盐值，与学生版 trial.json 互不通用（即便目录误共享也不会混算）。
-# 注：v1.0.22 起弃用 base64+XOR 混淆存储（杀软 ML 误报元凶，见 license.py 注释）。
-# 盐值非机密（客户端内可见），改明文常量。
+# 试用计数封印盐：导师版独立盐值（与学生版不同），作文件内 used 防手改的第二层保护。
+# 真正隔离靠上面的「按产品分文件」；盐值非机密（客户端内可见），改明文常量。
 _TRIAL_SALT = b"tfd|mentor|trial|count|2026|v2"
 
 
