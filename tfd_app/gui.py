@@ -159,7 +159,7 @@ _FONT_BASE = {
     "F_DIALOG_TITLE": ("KaiTi", 14, "bold"),    # 弹窗标题（楷体）
     "F_ICON":       ("KaiTi", 12, "bold"),      # 印章图标（论 / 模，楷体朱砂）
 }
-APP_VERSION = "1.1.46"
+APP_VERSION = "1.1.47"
 
 # v1.0.31：绿色 zip 版由软件自建桌面快捷方式（win32com 已内置，客户零依赖、零黑框）。
 APP_SHORTCUT_NAME = "文档格式先生·导师版"   # 桌面快捷方式显示名
@@ -821,7 +821,7 @@ class App:
         _badge.pack(side="left", padx=(10, 0))
         tk.Label(_badge, text="导师版", bg=CINNABAR,
                  fg="#ffffff", font=("Microsoft YaHei", 12, "bold")).pack()
-        tk.Label(header, text="THESIS FORMAT DOCTOR · 导师专用 · 高校论文格式规范引擎",
+        tk.Label(header, text="MR. DOCUMENT FORMATTER · 导师专用 · 高校论文格式规范引擎",
                  bg=PAPER, fg="#8b8378", font=F_SUBTITLE).pack(anchor="center", pady=(6, 0))
         tk.Frame(self.root, bg=CINNABAR, height=2).pack(fill="x", padx=20)
 
