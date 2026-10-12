@@ -1,4 +1,4 @@
-# AGENTS.md — tfd-mentor（论文格式医生 · 导师版）
+# AGENTS.md — tfd-mentor（文档格式先生 · 导师版）
 
 > 这是给 Codex / AI 编码助手的**上下文文件**。
 > 老板（芦苇）不懂代码 —— 你改完必须交 **diff + 大白话说明**，经「技术专家团」代码把关（fan-zhengma）后才算完成，最终由老板真机验收。

@@ -1327,7 +1327,7 @@ def _existing_comment_texts(z, p):
 def _apply_comments(z, root, changes, replacements, author=None):
     """为 changes 中每个带 `_para` 段落引用的 change 添加 Word 批注。
 
-    author: 批注署名（导师版可传导师名，如"论文格式医生·导师版"）。提示类批注
+    author: 批注署名（导师版可传导师名，如"文档格式先生·导师版"）。提示类批注
             自动追加"·提示"后缀，与"已修改"批注区分不同气泡颜色。
     批注 ID 从文档现有最大 ID + 1 开始，绝不覆盖已有批注（学校模板批注/导师批注）。
     comments.xml / [Content_Types].xml / document.xml.rels 的新建与注册由
@@ -1338,7 +1338,7 @@ def _apply_comments(z, root, changes, replacements, author=None):
         return 0
     comments_root = ensure_comments_part(z, replacements)
     next_id = max_comment_id(z) + 1
-    base = author or "论文格式医生"
+    base = author or "文档格式先生"
     n = 0
     for c in para_changes:
         p = c.get("_para")
@@ -1380,7 +1380,7 @@ def _strip_our_comments(z, root, replacements, author):
     已修正的段落不再残留旧批注气泡。仅按作者名识别本工具批注
     （author 或 author+'·提示'），保留用户/学校模板原有批注。
     返回被清理的批注条数。"""
-    base = author or "论文格式医生"
+    base = author or "文档格式先生"
     try:
         croot = ET.fromstring(z.read("word/comments.xml"))
     except Exception:

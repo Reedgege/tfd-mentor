@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-论文格式医生 · 导师版 原生 Tkinter 界面（导师检查学生论文、生成批注副本）
+文档格式先生 · 导师版 原生 Tkinter 界面（导师检查学生论文、生成批注副本）
 ==============================================
 面向客户的简洁流程，不展示任何执行细节；一屏放得下，无需滚动：
 
@@ -85,7 +85,7 @@ def _apply_app_icon(win, as_default=False):
 
 QRCODE = os.path.join(HERE, "assets", "qrcode.png")
 MINIAPP_QRCODE = os.path.join(HERE, "assets", "miniapp_qrcode.png")
-MINIAPP_NAME = "芦苇论文格式"
+MINIAPP_NAME = "文档格式先生"
 # 品牌 / 客服（文案统一来源，避免散落硬编码）
 WECHAT_NAME = "芦苇不熬夜"
 WECHAT_ID = "reedskill"
@@ -162,7 +162,7 @@ _FONT_BASE = {
 APP_VERSION = "1.1.44"
 
 # v1.0.31：绿色 zip 版由软件自建桌面快捷方式（win32com 已内置，客户零依赖、零黑框）。
-APP_SHORTCUT_NAME = "论文格式医生·导师版"   # 桌面快捷方式显示名
+APP_SHORTCUT_NAME = "文档格式先生·导师版"   # 桌面快捷方式显示名
 SHORTCUT_FLAG_TAG = "ThesisFormatDoctorMentor"  # %APPDATA% 下询问标记目录（区分学生/导师版）
 
 
@@ -667,7 +667,7 @@ class App:
         global _APP_REF
         self.root = root
         _APP_REF = self
-        self.root.title("论文格式医生 · 导师版")
+        self.root.title("文档格式先生 · 导师版")
         # v1.0.11：主区已可滚动，窗口不再需要靠"撑得巨大"来露出页脚。
         # 默认尺寸按屏幕自适应（不超过屏幕 86%×88%），小屏也能容纳；最小尺寸放宽，
         # 再小的窗口也只是主区内部滚动，页脚 / 状态栏始终可见。
@@ -712,7 +712,7 @@ class App:
         self.thesis_paths = []                  # 批量：已选论文路径列表
         self.template_path = tk.StringVar()
         self.profile_path = tk.StringVar()
-        self.author_var = tk.StringVar(value="论文格式医生·导师版")  # 批注署名（导师名）
+        self.author_var = tk.StringVar(value="文档格式先生·导师版")  # 批注署名（导师名）
         # 导师版交付方式：批注副本 / 一键修正 / ①+② 都要（三选一，默认只批注不改原稿）
         self._fix_mode = "annotate"
         self._fix_mode_var = tk.StringVar(value="annotate")  # 交付模式：annotate / fix / both
@@ -892,12 +892,12 @@ class App:
         # 页脚（两行版权，贴底）
         footer = tk.Frame(self.root, bg=PAPER)
         footer.pack(side="bottom", fill="x", pady=(0, 18))
-        tk.Label(footer, text="论文格式医生 · 导师版 — 本机处理，文件不会上传任何服务器",
+        tk.Label(footer, text="文档格式先生 · 导师版 — 本机处理，文件不会上传任何服务器",
                  bg=PAPER, fg=MUTED, font=F_FOOT).pack()
         f2 = tk.Frame(footer, bg=PAPER)
         f2.pack(pady=(3, 0))
         tk.Label(f2,
-                 text="© 2026 论文格式医生 · 公众号【芦苇不熬夜】 ID：reedskill · 合作联系：hi@reedskill.com",
+                 text="© 2026 文档格式先生 · 公众号【芦苇不熬夜】 ID：reedskill · 合作联系：hi@reedskill.com",
                  bg=PAPER, fg=MUTED, font=F_FOOT).pack(side="left")
         _site_label(f2).pack(side="left", padx=(6, 0))
 
@@ -907,7 +907,7 @@ class App:
         statusbar.pack(side="bottom", fill="x", padx=20, pady=(6, 6))
         self.bar_dot = tk.Label(statusbar, text="●", bg=PANEL, fg=OKC, font=F_FOOT)
         self.bar_dot.pack(side="left", padx=(0, 6))
-        self.bar_left = tk.Label(statusbar, text="论文格式医生 · 导师版",
+        self.bar_left = tk.Label(statusbar, text="文档格式先生 · 导师版",
                                  bg=PANEL, fg=MUTED, font=F_FOOT)
         self.bar_left.pack(side="left")
         self.bar_right = tk.Label(statusbar, text="请按步骤操作",
@@ -983,7 +983,7 @@ class App:
         self._manual_status.bind("<Button-1>", lambda _e: self._open_manual_dialog())
         self._manual_frame.pack_forget()  # 默认隐藏（模板模式）
 
-        # 批注署名：导师名，出现在 Word 批注气泡作者栏（默认"论文格式医生·导师版"）
+        # 批注署名：导师名，出现在 Word 批注气泡作者栏（默认"文档格式先生·导师版"）
         _auth_row = tk.Frame(card, bg=PANEL)
         _auth_row.pack(fill="x", padx=14, pady=(2, 2))
         tk.Frame(_auth_row, bg=ACCENT, width=4, height=15).pack(side="left", padx=(0, 7))
@@ -1310,7 +1310,7 @@ class App:
         """底部状态栏：idle / running / done / error。"""
         cmap = {"idle": OKC, "running": RUN, "done": OKC, "error": ERRC}
         tmap = {
-            "idle": ("就绪 · 论文格式医生·导师版 v%s · 本机处理" % APP_VERSION, "请按步骤操作"),
+            "idle": ("就绪 · 文档格式先生·导师版 v%s · 本机处理" % APP_VERSION, "请按步骤操作"),
             "running": ("处理中…", hint or "正在处理"),
             "done": ("已完成", "可再处理一篇"),
             "error": ("出错", "请重试或联系客服"),
@@ -2875,7 +2875,7 @@ class App:
             # 汇总 Excel（检查 / 修正 共用列表，仅标题与文件名按模式区分）
             _is_check = (mode == "check")
             summary = ["批量%s模式：%s" % ("检查" if _is_check else "处理", mode_label),
-                       "共 %d 篇，署名：%s" % (total, author or "论文格式医生·导师版"),
+                       "共 %d 篇，署名：%s" % (total, author or "文档格式先生·导师版"),
                        ("每篇的检查报告已生成于本文件夹" if _is_check
                         else "每篇的逐条修改/批注明细见同名 _修改明细.xlsx")]
             columns = [("序号", 600), ("原文件名", 2600), ("交付方式", 1400),
@@ -2884,7 +2884,7 @@ class App:
                 write_change_report_xlsx(
                     os.path.join(out_dir, "汇总_检查明细.xlsx" if _is_check else "汇总_修改明细.xlsx"),
                     ("批量检查汇总（%s）" if _is_check else "批量处理汇总（%s）")
-                    % (author or "论文格式医生·导师版"), summary, columns, rows)
+                    % (author or "文档格式先生·导师版"), summary, columns, rows)
             except Exception as e:
                 self._debug("[汇总 Excel 生成失败] " + str(e))
             # 全组共性问题总表（便于导师组会一句话汇报）
@@ -2892,7 +2892,7 @@ class App:
                 _g_sum, _g_cols, _g_rows = aggregate(group_cats, total)
                 write_change_report_xlsx(
                     os.path.join(out_dir, "汇总_全组共性问题.xlsx"),
-                    "全组共性问题总表（%s）" % (author or "论文格式医生·导师版"), _g_sum, _g_cols, _g_rows)
+                    "全组共性问题总表（%s）" % (author or "文档格式先生·导师版"), _g_sum, _g_cols, _g_rows)
             except Exception as e:
                 self._debug("[全组共性问题总表生成失败] " + str(e))
             self._batch_out_dir = out_dir
@@ -3649,7 +3649,7 @@ class App:
         try:
             webbrowser.open("mailto:%s?subject=%s&body=%s" % (
                 ABOUT_MAIL,
-                urllib.parse.quote("论文格式医生·导师版 用户反馈"),
+                urllib.parse.quote("文档格式先生·导师版 用户反馈"),
                 urllib.parse.quote(body)))
         except Exception:
             pass
@@ -3678,7 +3678,7 @@ class App:
     def _feedback_dialog(self):
         """意见反馈：邮箱（选填）+ 反馈内容（必填）+ 隐私说明 + 行内状态。"""
         top = tk.Toplevel(self.root)
-        top.title("意见反馈 · 论文格式医生·导师版")
+        top.title("意见反馈 · 文档格式先生·导师版")
         top.configure(bg=PAPER)
         top.transient(self.root)
         try:
@@ -3827,7 +3827,7 @@ def show_activation(root, show_trial=True):
     result = {"v": "quit"}
     top = tk.Toplevel(root)
     _apply_app_icon(top)
-    top.title("激活 · 论文格式医生·导师版")
+    top.title("激活 · 文档格式先生·导师版")
     top.configure(bg=PAPER)
     top.resizable(False, False)
     # v1.3.65：窗口尺寸自适应屏幕（笔记本 768 高屏幕时 720 高的窗口底部会被截在屏外）
@@ -3984,7 +3984,7 @@ def show_activation(root, show_trial=True):
 
     tk.Label(top, text="未签名程序提示：Windows 可能弹出 SmartScreen 拦截，点击「详细信息」→「仍要运行」即可打开（官网激活教程有图文演示）。",
              bg=PAPER, fg=MUTED, font=F_FOOT, wraplength=560).pack(pady=(2, 6))
-    tk.Label(top, text="© 2026 论文格式医生 · 公众号【芦苇不熬夜】 ID：reedskill · 合作联系：hi@reedskill.com",
+    tk.Label(top, text="© 2026 文档格式先生 · 公众号【芦苇不熬夜】 ID：reedskill · 合作联系：hi@reedskill.com",
              bg=PAPER, fg=MUTED, font=F_FOOT, wraplength=560).pack(pady=(8, 10))
 
     # v1.3.67：按内容实际所需高度自动伸缩窗口（Tk 自动测量，保证底部版权完整显示不截断），
@@ -4089,7 +4089,7 @@ def _auto_wrap(lbl, container, padx, extra=0):
 def show_about(parent):
     """关于页：名片式居中排版，细线分隔，文字随窗口自适应。"""
     top = tk.Toplevel(parent)
-    top.title("关于 · 论文格式医生·导师版")
+    top.title("关于 · 文档格式先生·导师版")
     top.configure(bg=PAPER)
     top.geometry("565x680")
     top.resizable(True, True)
@@ -4159,7 +4159,7 @@ def show_about(parent):
 def show_help(parent):
     """使用帮助：文档式左对齐排版，分区细线，文字随窗口自适应。"""
     top = tk.Toplevel(parent)
-    top.title("使用帮助 · 论文格式医生·导师版")
+    top.title("使用帮助 · 文档格式先生·导师版")
     top.configure(bg=PAPER)
     top.geometry("805x680")
     top.resizable(True, True)

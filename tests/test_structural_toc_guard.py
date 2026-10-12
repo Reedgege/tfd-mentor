@@ -67,7 +67,7 @@ def test_structural_pass_skips_toc_entries():
     with zipfile.ZipFile(tmp_src, "w", zipfile.ZIP_DEFLATED) as zout:
         for name in z.namelist():
             zout.writestr(name, z.read(name))
-    changes = hf.fix(tmp_src, tmp_dst, profile=profile, add_comments=True, author="论文格式医生·导师版")
+    changes = hf.fix(tmp_src, tmp_dst, profile=profile, add_comments=True, author="文档格式先生·导师版")
     if isinstance(changes, tuple):
         changes = changes[0]
 
