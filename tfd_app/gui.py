@@ -163,7 +163,7 @@ APP_VERSION = "1.1.49"
 
 # v1.0.31：绿色 zip 版由软件自建桌面快捷方式（win32com 已内置，客户零依赖、零黑框）。
 APP_SHORTCUT_NAME = "文档格式先生·导师版"   # 桌面快捷方式显示名
-SHORTCUT_FLAG_TAG = "ThesisFormatDoctorMentor"  # %APPDATA% 下询问标记目录（区分学生/导师版）
+SHORTCUT_FLAG_TAG = "MDFMentor"  # %APPDATA% 下询问标记目录（区分学生/导师版）
 
 
 def _is_frozen_exe():
