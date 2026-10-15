@@ -130,7 +130,7 @@ jobs:
           $MAKENSIS = "C:\Program Files (x86)\NSIS\makensis.exe"
           if (-not (Test-Path $MAKENSIS)) { $MAKENSIS = "makensis" }
           & $MAKENSIS /DVERSION=$VER /DVERNUM=$VERNUM installer.nsi
-          ls tfd-mentor-setup.exe
+          ls MDF-Advisor-setup.exe
 
       # Windows 双轨分发：除了 setup.exe 安装包，再打一个"文件夹 zip"作为主推分发
       # （解压后的主程序 exe 已实测 VirusTotal 0 报；安装包外壳偶被 Defender ML 误报）。
@@ -140,7 +140,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path release | Out-Null
-          Compress-Archive -Path "dist\文档格式先生·导师版（免安装版）\*" -DestinationPath "release\tfd-mentor-windows.zip" -Force
+          Compress-Archive -Path "dist\文档格式先生·导师版（免安装版）\*" -DestinationPath "release\MDF-Advisor-windows.zip" -Force
           ls release
 
       # macOS：把 .app 压缩成 zip 作为发布物。
@@ -149,7 +149,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p release
-          ditto -c -k -v "dist/tfd-mentor.app" "release/tfd-mentor-macos.zip"
+          ditto -c -k -v "dist/MDF-Advisor.app" "release/MDF-Advisor-macos.zip"
 
       # Linux：把 standalone 文件夹压缩成 zip。
       - name: Package (Linux)
@@ -157,7 +157,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p release
-          cd dist && zip -r "../release/tfd-mentor-linux.zip" "tfd-mentor"
+          cd dist && zip -r "../release/MDF-Advisor-linux.zip" "MDF-Advisor"
 
       # 构建后自检：运行时资源（窗口图标 / 二维码 / 水印图）必须真的进了产物。
       # v1.1.0 及更早的 build.py 漏了 tfd_app/assets，而读取方都有 isfile 守卫，
@@ -169,12 +169,12 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: tfd-mentor-${{ matrix.os }}
+          name: MDF-Advisor-${{ matrix.os }}
           path: |
-            tfd-mentor-setup.exe
-            release/tfd-mentor-windows.zip
-            release/tfd-mentor-macos.zip
-            release/tfd-mentor-linux.zip
+            MDF-Advisor-setup.exe
+            release/MDF-Advisor-windows.zip
+            release/MDF-Advisor-macos.zip
+            release/MDF-Advisor-linux.zip
           if-no-files-found: ignore
           retention-days: 1
 
@@ -199,7 +199,7 @@ jobs:
         run: |
           mkdir -p release
           for plat in windows macos linux; do
-            find "artifacts/tfd-mentor-$plat" -type f | while read f; do
+            find "artifacts/MDF-Advisor-$plat" -type f | while read f; do
               cp "$f" "release/$(basename "$f")"
             done
           done
