@@ -533,12 +533,14 @@ def _log_fix_error(src, label, exc):
         pass
 
 
-def run_fix_headings(src, dst, profile_path=None, report_docx=None, add_comments=True, modify=True, author=None, xlsx_path=None):
+def run_fix_headings(src, dst, profile_path=None, report_docx=None, add_comments=True, modify=True, author=None, xlsx_path=None, three_line=None):
     """一键套标题样式（通用或模板驱动）。
 
     src: 输入 docx；dst: 输出 docx（新文件，不改动 src）；
     report_docx: 修改明细 docx（可选）；add_comments: 是否在文档写批注；
-    xlsx_path: 修改明细 Excel（可选，导师版偏好）。返回 markdown 修改清单文本。
+    xlsx_path: 修改明细 Excel（可选，导师版偏好）；
+    three_line: 三线表触发（None=跟随模板画像；True=强制转；False=强制不转）。
+    返回 markdown 修改清单文本。
 
     模板驱动原则（v1.3.42）：本软件是模板驱动的修正工具——客户选择了学校模板后，
     修正必须严格按【从模板提取的画像】执行。因此当 profile_path 非空时，
@@ -559,6 +561,11 @@ def run_fix_headings(src, dst, profile_path=None, report_docx=None, add_comments
         base += ["--author", author]
     if xlsx_path:
         base += ["--xlsx", xlsx_path]
+    # 三线表触发：默认跟随模板画像；显式覆盖时传 CLI 标志
+    if three_line is True:
+        base += ["--three-line"]
+    elif three_line is False:
+        base += ["--no-three-line"]
     attempts = []
     if report_docx:
         attempts.append((base + ["--report", report_docx], "模板+修改报告"))
