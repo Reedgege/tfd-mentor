@@ -7,9 +7,13 @@
 # 用 xml.etree.ElementTree 重写，以保国内版「零第三方依赖」底线。
 #
 # 三线表定义（学术规范，与海外版同一口径）：
-#   ① 有顶线  ② 有底线  ③ 表头下方一条栏目线（首行各格 bottom）
-#   ④ 无竖线（left / right / insideV）  ⑤ 无内部横线（insideH）
+#   ① 有顶线  ② 有底线  ③ 表头块下方有栏目线  ④ 无竖线（left / right / insideV）
+#   ⑤ 无内部横线（insideH）
 # 单行 / 1×1 布局表（rows<2）无法形成表头线，不判也不修（与 checker 同一口径）。
+#
+# 「表头块」的识别只看**表格结构**（vMerge=restart / vMerge=continue 链）+ 文本长度，
+# 绝不看底纹 —— 底纹是装饰不是语义，有的人加、有的人（老板原话）根本不加。
+# 矩阵类表格（EFE/IFE、SWOT 汇总）一张表里常拼两三组表头，每组都要有线。
 #
 # 铁律（移植时一处都不能省）：
 #   · 单元格级 tcBorders 优先级高于表格级 tblBorders —— 不清就是白改，必须逐格删残留。
@@ -31,6 +35,16 @@ _TBLPR_AFTER_BORDERS = ("shd", "tblLayout", "tblCellMar", "tblLook",
 # CT_TcPr 子元素顺序：tcBorders 必须排在 shd/noWrap/tcMar/… 之前
 _TCPR_AFTER_BORDERS = ("shd", "noWrap", "tcMar", "textDirection",
                        "tcFitText", "vAlign", "hideMark")
+
+# CT_TcBorders / CT_TblBorders 内部子元素的 schema 规定顺序
+_TBL_BORDER_ORDER = ("top", "start", "left", "bottom", "end", "right",
+                     "insideH", "insideV")
+_TCPR_BORDER_ORDER = _TBL_BORDER_ORDER + ("tl2br", "tr2bl")
+
+# 🔴 斜线表头的对角线：这是**表头语义**（"内部/外部环境 × 优势/劣势"），
+# 不是表格框线。三线表只该去掉竖线与内部横线，绝不能把对角线一起删掉 ——
+# 否则同一批文档里「画成形状的斜线留着、设成对角边框的斜线没了」，客户看到的就是"有的在有的不在"。
+_DIAGONAL_SIDES = ("tl2br", "tr2bl")
 
 
 def _q(name):
@@ -66,6 +80,22 @@ def _ordered_child(parent, tag, after_tags):
     return el
 
 
+def _sort_border_box(box):
+    """按 schema 顺序重排边框容器子元素。
+
+    保留对角线（tl2br/tr2bl）后，新写进去的 bottom 会被追加到它们后面，
+    而 CT_TcBorders 规定 tl2br/tr2bl 必须排在最后 —— 顺序一错 Word 就报「文件已损坏」。
+    """
+    order = _TCPR_BORDER_ORDER if box.tag == _q("tcBorders") else _TBL_BORDER_ORDER
+    rank = {_q(t): i for i, t in enumerate(order)}
+    children = list(box)
+    children.sort(key=lambda e: rank.get(e.tag, 999))
+    for ch in children:
+        box.remove(ch)
+    for ch in children:
+        box.append(ch)
+
+
 def _write_border(box, side, val, sz):
     """在 tblBorders / tcBorders 容器写某一边（先删后建，保证属性干净）。"""
     old = box.find(_q(side))
@@ -77,6 +107,7 @@ def _write_border(box, side, val, sz):
         el.set(_q("sz"), str(sz))
         el.set(_q("space"), "0")
         el.set(_q("color"), "auto")
+    _sort_border_box(box)
 
 
 def _read_border(box, side):
@@ -156,6 +187,98 @@ def _row_tc_prs(row_el):
     return out
 
 
+def _row_anchor_p(row_el):
+    """取一行里第一个单元格的第一个 w:p —— 用作 Word 批注的挂载点。
+
+    批注标记（commentRangeStart/End + commentReference）只能落在段落里，
+    表格单元格内的 w:p 正好合法；挂在表头行上，客户在 Word 里点开气泡
+    就能看到"这条线与本行对齐"。
+    """
+    for tc in row_el.findall(_q("tc")):
+        p = tc.find(_q("p"))
+        if p is not None:
+            return p
+    return None
+
+
+def _row_vmerge_state(row_el):
+    """一行在纵向合并里的角色：'restart'（起）/ 'continue'（承）/ ''（无关）。
+
+    🔴 这是识别「表头块」的主判据，不用底纹：
+       底纹是装饰、不是语义。有人用蓝底标表头，有人加斑马纹，有人整表灰底，
+       有人拿黄底强调某个数据格，还有人（老板原话）"可能不加底纹" ——
+       按装饰推语义，就是拿运气当规律。而 vMerge/gridSpan 是表格**结构**，
+       是文档自己写下来的层级关系，加不加底纹都在。
+    """
+    vals = []
+    for tc in row_el.findall(_q("tc")):
+        tcPr = tc.find(_q("tcPr"))
+        if tcPr is None:
+            continue
+        v = tcPr.find(_q("vMerge"))
+        if v is None:
+            continue
+        vals.append(v.get(_q("val")) or "continue")
+    if "restart" in vals:
+        return "restart"
+    if vals:
+        return "continue"
+    return ""
+
+
+# 表头格都是短词/短语（"权重"、"AS"、"成本领先战略"），不会是一整句话。
+_HDR_CELL_MAXLEN = 12
+
+
+def _row_looks_header(row_el):
+    """格内文本是否都短到像表头（用来挡掉数据区里的长句行）。"""
+    texts = []
+    for tc in row_el.findall(_q("tc")):
+        t = "".join(x.text or "" for x in tc.iter(_q("t"))).strip()
+        if t:
+            texts.append(t)
+    if not texts:
+        return False
+    return max(len(t) for t in texts) <= _HDR_CELL_MAXLEN
+
+
+def _header_line_rows(rows):
+    """返回需要画「表头栏目线」的行下标（每个表头块的**末行**）。
+
+    规则（只吃结构 + 文本，零底纹）：
+      · 块起点 = 首行，或任何「有 vMerge=restart 且自身文本是短词」的行；
+      · 块向下延伸，只沿着 vMerge=continue 链走，且链上每行都必须是短词行；
+      · 块末行 = 链断处的前一行。
+
+    实测三张多组表头的矩阵表：
+      表17（37行）行1 vm=restart / 行2 vm=continue+短词 → 末行 2；行18/19 同理 → 2、19
+      表20（30行）行1 vm=restart / 行2 vm=continue+短词 → 末行 2
+                  （旧逻辑只画首行，会把这两行父子表头劈成两半）
+      表11（17行）行1 vm=restart 但一路跨到行9，行2 起是"S1.牌照齐全，综合型券商。"长句
+                  → 文本闸门立刻截断，末行 = 1（正确：行1 就是唯一表头行）
+    检查器与修正器必须共用这一份判断，否则会出现「修完复检又报红」。
+    """
+    total = len(rows)
+    starts = [0]
+    for i in range(1, total):
+        # 数据区里的纵向合并（一格跨多行数据）也会写 vMerge=restart，
+        # 但它那一行的文本是长句，靠 _row_looks_header 挡掉。
+        if _row_vmerge_state(rows[i]) == "restart" and _row_looks_header(rows[i]):
+            starts.append(i)
+    ends = []
+    for s in starts:
+        j = s + 1
+        while (j < total
+               and _row_vmerge_state(rows[j]) == "continue"
+               and _row_looks_header(rows[j])):
+            j += 1
+        ends.append(j - 1)
+    ends = sorted(set(ends))
+    # 末行是表尾（底线已经在那儿），不再重复画栏目线
+    ends = [i for i in ends if i < total - 1]
+    return ends or [0]
+
+
 def _analyze_table(tbl, styles_root):
     """采样单表边框现状。rows<2（单行/1×1 布局表）返回 None。
 
@@ -187,16 +310,21 @@ def _analyze_table(tbl, styles_root):
                 has_vertical = True
             if _border_visible(_effective_border(tblPr, style_box, p, "insideH", exb)):
                 has_inside_h = True
-    # 表头行**任一**单元格有 bottom 即算有表头线（合并单元格常只给部分格写）。
-    has_header_line = bool(first) and any(
-        _border_visible(_effective_border(tblPr, style_box, p, "bottom", ex_first))
-        for p in first)
+    # 表头栏目线：**每个**表头块的末行都要有 bottom（不是"有一处就算"）。
+    # 多组表头的表（EFE/IFE 矩阵）里，线画在每个表头块的末行，不在首行。
+    hdr_rows = _header_line_rows(rows)
+    has_header_line = all(
+        any(_border_visible(_effective_border(tblPr, style_box, p, "bottom",
+                                              _row_ex_box(rows[i])))
+            for p in _row_tc_prs(rows[i]))
+        for i in hdr_rows)
     return {
         "rows": len(rows),
         "cols": len(first),
         "has_top": has_top,
         "has_bottom": has_bottom,
         "has_header_line": has_header_line,
+        "header_rows": [i + 1 for i in hdr_rows],   # 1 基，给人看/写报告
         "has_vertical": has_vertical,
         "has_inside_h": has_inside_h,
         "three_line": bool(has_top and has_bottom and not has_vertical
@@ -269,18 +397,33 @@ def apply_three_line_tables(root, styles_root=None):
                 ex.remove(exb)
             if len(ex) == 0:
                 row.remove(ex)   # tblPrEx 只剩空壳就没必要留着
-        # ②b 逐格：先清掉单元格级残留（优先级高于表格级，不清就是白改）
+        # ②b 逐格：清掉单元格级框线残留（优先级高于表格级，不清就是白改）；
+        #     但**对角线 tl2br/tr2bl 必须原样留着** —— 那是斜线表头的表头语义，
+        #     不是框线。整块 remove 会把客户的斜线表头删掉，而且删得"看运气"
+        #     （形状式斜线删不到、边框式斜线全没），客户就会问"为什么有的在有的不在"。
         for row in rows:
             for tc in row.findall(_q("tc")):
                 tcPr = tc.find(_q("tcPr"))
                 if tcPr is None:
                     continue
                 old = tcPr.find(_q("tcBorders"))
-                if old is not None:
+                if old is None:
+                    continue
+                diag_tags = {_q(s) for s in _DIAGONAL_SIDES}
+                if any(e.tag in diag_tags for e in old):
+                    for e in list(old):
+                        if e.tag not in diag_tags:
+                            old.remove(e)
+                    _sort_border_box(old)
+                else:
                     tcPr.remove(old)
-        # ③ 表头栏目线：第一行各格的下边框 0.75 磅（≥2 行才画，单行表谈不上表头）
-        if len(rows) >= 2:
-            for tc in rows[0].findall(_q("tc")):
+        # ③ 表头栏目线：**每个**表头块的末行各格下边框 0.75 磅。
+        #    🔴 只画 rows[0] 是旧逻辑，会漏掉矩阵表里的第二、第三组表头
+        #    （客户看到的就是"上面有那条横线，下面就没了"）；
+        #    而表20 那种父子两行表头，只画首行等于把表头劈成两半。
+        hdr_rows = _header_line_rows(rows)
+        for ri in hdr_rows:
+            for tc in rows[ri].findall(_q("tc")):
                 tcPr = tc.find(_q("tcPr"))
                 if tcPr is None:
                     # tcPr 必须是 tc 的第一个子元素，否则 OOXML 非法
@@ -290,7 +433,9 @@ def apply_three_line_tables(root, styles_root=None):
                 _write_border(cbox, "bottom", "single", _THIN_SZ)
         updated += 1
         changed.append({"index": len(changed) + 1, "rows": len(rows),
-                        "cols": len(rows[0].findall(_q("tc"))) if rows else 0})
+                        "cols": len(rows[0].findall(_q("tc"))) if rows else 0,
+                        "header_rows": [i + 1 for i in hdr_rows],
+                        "anchor": _row_anchor_p(rows[hdr_rows[0]])})
     return updated, changed
 
 
