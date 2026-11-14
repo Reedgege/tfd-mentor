@@ -274,15 +274,28 @@ jobs:
           hdiutil detach /tmp/dmgchk -force
 
       # Linux：把 standalone 文件夹压缩成 zip。
+      # Linux 只交付一个 .AppImage：单文件，客户 chmod +x 之后双击/直接运行即可 ——
+      # 不用解压、不用进目录找主程序、不用额外装 libfuse2（官方 type2 runtime 静态
+      # 链接了 FUSE）。真正的打包在 manylinux 容器里完成（见上一步脚本末段），
+      # 这里只做体检 + 改成发布名。
       - name: Package (Linux)
         if: matrix.os == 'linux'
         shell: bash
         run: |
           mkdir -p release
-          cd dist && zip -r "../release/MDF-Advisor-linux.zip" "MDF-Advisor"
-          cd ..
-          # 把「客户机器能不能跑」变成 CI 断言：产物 glibc 需求超过 2.28 直接红灯
-          python3 tools/check_glibc_linux.py release/MDF-Advisor-linux.zip --max 2.28
+          APPIMAGE="$(find dist -maxdepth 1 -name '*.AppImage' -print -quit)"
+          if [ -z "$APPIMAGE" ]; then
+            echo "::error::dist/ 里没有 .AppImage —— 容器里的打包步骤没成功"
+            ls -la dist/ || true
+            exit 1
+          fi
+          echo "AppImage: $APPIMAGE"
+          # 把「客户机器能不能跑」变成 CI 断言：glibc 需求超过 2.28 直接红灯。
+          # 查的是解包后的 payload 目录（squashfs 里的 ELF 与 dist/MDF-Advisor 同一批文件）。
+          python3 tools/check_glibc_linux.py dist/MDF-Advisor --max 2.28
+          cp "$APPIMAGE" release/MDF-Advisor-linux.AppImage
+          chmod +x release/MDF-Advisor-linux.AppImage
+          ls -la release/
 
       # 构建后自检：运行时资源（窗口图标 / 二维码 / 水印图）必须真的进了产物。
       # v1.1.0 及更早的 build.py 漏了 tfd_app/assets，而读取方都有 isfile 守卫，
@@ -300,7 +313,7 @@ jobs:
             release/MDF-Advisor-windows.zip
             release/MDF-Advisor-macos.zip
             release/MDF-Advisor-macos.dmg
-            release/MDF-Advisor-linux.zip
+            release/MDF-Advisor-linux.AppImage
           if-no-files-found: ignore
           retention-days: 1
 
