@@ -137,6 +137,22 @@ def _wheel_steps(delta):
         notches = 1                      # 小数倍率至少算一格，保证滚得动
     n = int(round(notches))
     return WHEEL_UNITS * n if d < 0 else -WHEEL_UNITS * n
+
+
+def _wheel_steps_event(e):
+    """滚轮事件 → units（向下为正）。
+
+    🔴 2026-11-17 老板实测：Linux（X11）导师版**操作界面**滚轮完全不动 ——
+    主区只绑了 ``<MouseWheel>``，而 X11 发的是 ``<Button-4>`` / ``<Button-5>``
+    （这两个事件没有 delta，旧代码拿 delta=0 算出的步长恒为 0）。
+    弹窗此前已绑三种事件，这里把方向/步长判定统一成一个函数，避免再漏。
+    """
+    num = getattr(e, "num", None)
+    if num == 4:
+        return -WHEEL_UNITS
+    if num == 5:
+        return WHEEL_UNITS
+    return _wheel_steps(getattr(e, "delta", 0))
 RUN     = ACCENT      # 处理中（黛蓝）
 
 # 字体：标题 / 章节 / 状态用楷体（KaiTi，文艺调性），正文 / 按钮 / 页脚用微软雅黑（清晰）
@@ -879,7 +895,7 @@ class App:
             w = e.widget
             if isinstance(w, _SELF_SCROLLING) and w is not self._body_cv:
                 return
-            steps = _wheel_steps(getattr(e, "delta", 0))
+            steps = _wheel_steps_event(e)
             if steps:
                 # 滚动前先按当前真实内容刷新一次滚动范围：内容变化（报告区变长/收起）
                 # 后若 scrollregion 滞后，向上滚会被上界"顶住"，表现就是滚不回去。
@@ -890,7 +906,10 @@ class App:
                 self._body_cv.yview_scroll(steps, "units")
 
         if not getattr(self, "_wheel_bound", False):
+            # X11（Linux）发 Button-4/5，MouseWheel 只覆盖 Windows/macOS —— 三种都绑
             self.root.bind_all("<MouseWheel>", _on_wheel)
+            self.root.bind_all("<Button-4>", _on_wheel)
+            self.root.bind_all("<Button-5>", _on_wheel)
             self._wheel_bound = True
 
         # 页脚（两行版权，贴底）
