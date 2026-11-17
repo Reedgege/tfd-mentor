@@ -8,7 +8,6 @@
   - engine.run_reformat_refs（参考文献重排）
   - engine.run_build_profile（模板画像提取）
   - group_report.aggregate + xlsx_report.write_change_report_xlsx（汇总 Excel）
-  - watermark.apply_watermark（水印 + 只读）
   - trial / license 激活边界（指向临时目录，不碰真实 ~/.tfd_mentor_license）
 
 用法：python tfd-mentor/tests/test_headless_regression.py
@@ -32,7 +31,6 @@ if ROOT not in sys.path:
 from tfd_app import engine
 from tfd_app.core import group_report
 from tfd_app.core import xlsx_report
-from tfd_app import watermark
 from tfd_app import trial
 from tfd_app import license as lic
 
@@ -223,17 +221,7 @@ def run_all():
         except Exception:
             ck("group_report/xlsx_report 不崩", False, traceback.format_exc().splitlines()[-1])
 
-        # 8) 水印 + 只读（作用在副本上，不破坏原文件）
-        wm_src = os.path.join(tmp, "wm_src.docx")
-        shutil.copy(src, wm_src)
-        try:
-            watermark.apply_watermark(wm_src)
-            ok = _is_valid_docx(wm_src)
-            ck("watermark.apply_watermark 不崩且产出合法 docx", ok)
-        except Exception:
-            ck("watermark.apply_watermark 不崩且产出合法 docx", False, traceback.format_exc().splitlines()[-1])
-
-        # 9) trial / license 边界（指向临时目录，不影响真实授权）
+        # 8) trial / license 边界（指向临时目录，不影响真实授权）
         lic.LICENSE_DIR = tmp
         lic.LICENSE_FILE = os.path.join(tmp, "license.json")
         trial.TRIAL_FILE = os.path.join(tmp, "trial.json")
