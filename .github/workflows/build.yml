@@ -229,14 +229,27 @@ jobs:
           mkdir -p release
           # zip：--keepParent 保住「文档格式先生·导师版.app」这一层
           ditto -c -k --keepParent -v "$APP" "release/MDF-Advisor-macos.zip"
-          # 自检：zip 顶层必须恰好是中文 .app 名，否则客户解压出来还是废的
+          # 自检：zip 顶层必须恰好是中文 .app 名，否则客户解压出来还是废的。
+          # 🔴 ditto 打中文名写 UTF-8 字节但不设 zip 的 UTF-8 标志位，Python
+          #    zipfile 会按 CP437 误读成乱码。macOS 解压按 UTF-8、客户所见正常。
+          #    故还原真实字节校验：乱码时 cp437 编码回去再按 utf-8 解，对上即过。
           python3 - <<'PY'
           import sys, zipfile
+          WANT = "文档格式先生·导师版.app"
           z = zipfile.ZipFile("release/MDF-Advisor-macos.zip")
           tops = sorted({n.split("/")[0] for n in z.namelist()})
-          print("zip 顶层条目:", tops)
-          if tops != ["文档格式先生·导师版.app"]:
-              print("!! zip 顶层不是 文档格式先生·导师版.app，客户解压后双击无效")
+          print("zip 顶层条目(原始):", tops)
+          def real(name):
+              if name == WANT:
+                  return name
+              try:
+                  return name.encode("cp437").decode("utf-8")
+              except (UnicodeEncodeError, UnicodeDecodeError):
+                  return name
+          got = [real(t) for t in tops]
+          print("zip 顶层条目(还原):", got)
+          if got != [WANT]:
+              print("!! zip 顶层不是 %s，客户解压后双击无效" % WANT)
               sys.exit(1)
           print("OK 顶层正确")
           PY
