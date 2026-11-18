@@ -196,6 +196,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # 🔴 ditto 打中文文件名必须在 UTF-8 locale 下跑：否则 zip 里文件名
+          #    字节虽是 UTF-8、却没写 UTF-8 标志位（bit 11），Python/部分解压
+          #    工具按 CP437 解码就成了乱码（v1.1.64 首跑踩过，CI 红灯）。
+          export LC_ALL=en_US.UTF-8
+          export LANG=en_US.UTF-8
           # v1.1.64：免安装版 .app 目录名中文化（客户解压 zip / 挂载 dmg 第一眼见到）。
           # 注意只改 dist 里的目录名；release/ 下的资产文件名仍是英文（R2 / 下载页依赖）。
           APP="dist/文档格式先生·导师版.app"
